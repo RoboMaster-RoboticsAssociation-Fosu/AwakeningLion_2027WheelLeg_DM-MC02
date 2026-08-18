@@ -1,0 +1,79 @@
+<html>
+<body>
+<pre>
+<h1>µVision Build Log</h1>
+<h2>Tool Versions:</h2>
+IDE-Version: ¦ÌVision V5.36.0.0
+Copyright (C) 2021 ARM Ltd and ARM Germany GmbH. All rights reserved.
+License Information: lenovo,  , LIC=FYKYW-QHGRQ-9UZ4U-SVS8W-8QH63-140M3
+ 
+Tool Versions:
+Toolchain:       MDK-ARM Plus  Version: 5.36.0.0
+Toolchain Path:  C:\Keil_v5\ARM\ARMCLANG\Bin
+C Compiler:      ArmClang.exe V6.16
+Assembler:       Armasm.exe V6.16
+Linker/Locator:  ArmLink.exe V6.16
+Library Manager: ArmAr.exe V6.16
+Hex Converter:   FromElf.exe V6.16
+CPU DLL:         SARMCM3.DLL V5.36.0.0
+Dialog DLL:      DCM.DLL V1.17.3.0
+Target DLL:      Segger\JL2CM3.dll V2.99.40.0
+Dialog DLL:      TCM.DLL V1.53.0.0
+ 
+<h2>Project:</h2>
+E:\ROBOT_NEW\wheel_legger\code_framework v1.1\MDK-ARM\CtrlBoard-H7_IMU.uvprojx
+Project File Date:  08/16/2026
+
+<h2>Output:</h2>
+*** Using Compiler 'V6.16', folder: 'C:\Keil_v5\ARM\ARMCLANG\Bin'
+Build target 'CtrlBoard-H7_IMU'
+compiling VMC_calc.c...
+compiling Stepper_Motor.c...
+compiling LQR.c...
+compiling bsp_can.c...
+compiling ps2_task.c...
+compiling Remote_task.c...
+../User/APP/chassis_task.c(239): warning: incompatible pointer types passing 'DJI_Motor_Info_Typedef (*)[2]' to parameter of type 'DJI_Motor_Info_Typedef *' [-Wincompatible-pointer-types]
+                DJI_Motor_ctrl(&Chassis.Wheel_Motor,&LEFT_Wheel_CAN_hfdcan,Chassis_Time);
+                               ^~~~~~~~~~~~~~~~~~~~
+../User/Devices/DJI_Motor\DJI_Motor.h(109): note: passing argument to parameter 'DJI_Motor' here
+void DJI_Motor_ctrl(DJI_Motor_Info_Typedef *DJI_Motor,hcan_t* hcan, uint16_t delay_time);
+                                            ^
+../User/APP/chassis_task.c(248): warning: incompatible pointer types passing 'DJI_Motor_Info_Typedef (*)[2]' to parameter of type 'DJI_Motor_Info_Typedef *' [-Wincompatible-pointer-types]
+                DJI_Motor_ctrl(&Chassis.Wheel_Motor,&LEFT_Wheel_CAN_hfdcan,Chassis_Time);
+                               ^~~~~~~~~~~~~~~~~~~~
+../User/Devices/DJI_Motor\DJI_Motor.h(109): note: passing argument to parameter 'DJI_Motor' here
+void DJI_Motor_ctrl(DJI_Motor_Info_Typedef *DJI_Motor,hcan_t* hcan, uint16_t delay_time);
+                                            ^
+2 warnings generated.
+compiling chassis_task.c...
+compiling freertos.c...
+linking...
+Program Size: Code=105444 RO-data=3720 RW-data=4364 ZI-data=43700  
+FromELF: creating hex file...
+"CtrlBoard-H7_IMU\CtrlBoard-H7_IMU.axf" - 0 Error(s), 2 Warning(s).
+
+<h2>Software Packages used:</h2>
+
+Package Vendor: ARM
+                http://www.keil.com/pack/ARM.CMSIS.5.8.0.pack
+                ARM.CMSIS.5.8.0
+                CMSIS (Common Microcontroller Software Interface Standard)
+   * Component: CORE Version: 5.5.0
+
+Package Vendor: Keil
+                https://www.keil.com/pack/Keil.STM32H7xx_DFP.4.1.3.pack
+                Keil.STM32H7xx_DFP.4.1.3
+                STMicroelectronics STM32H7 Series Device Support
+
+<h2>Collection of Component include folders:</h2>
+  .\RTE\_CtrlBoard-H7_IMU
+  C:\Users\lenovo\AppData\Local\Arm\Packs\ARM\CMSIS\5.8.0\CMSIS\Core\Include
+
+<h2>Collection of Component Files used:</h2>
+
+   * Component: ARM::CMSIS:CORE:5.5.0
+Build Time Elapsed:  00:00:04
+</pre>
+</body>
+</html>
