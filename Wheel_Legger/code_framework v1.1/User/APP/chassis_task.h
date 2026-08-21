@@ -72,6 +72,10 @@ typedef struct
 	float theta;         // 俯仰角度
 	float d_theta;       // 俯仰角度速度
 
+	float Estimate_dx; //估计的车体相对于地面速度，单位是m/s
+	float Estimate_h; //估计的车体高度，单位是m
+	float Estimate_dyaw; //估计的车体偏航角度速度，单位是弧度/s
+
 } BodyState_t;
 
 typedef struct
@@ -98,6 +102,7 @@ typedef enum{
 	offline,
 	online
 }Chassis_Mode;
+
 
 
 typedef struct

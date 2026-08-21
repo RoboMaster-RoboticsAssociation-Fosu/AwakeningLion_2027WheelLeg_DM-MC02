@@ -73,7 +73,7 @@ void LQR_Calc(float L_l,float L_r)
     uint8_t i;
 
     u[0] = mySaturate(                       0.0f -        Chassis.body_state.x,-X_MAX, X_MAX);
-    u[1] =   Chassis.set_goal.v_set -       Chassis.body_state.dx;
+    u[1] =   Chassis.set_goal.v_set -       Chassis.body_state.Estimate_dx;
     u[2] = mySaturate(Find_Min_RADIAN(INS.Yaw, Chassis.set_goal.yaw_set),-Yaw_MAX, Yaw_MAX);
     u[3] = Chassis.set_goal.yaw_set_v -     Chassis.body_state.d_yaw;
     u[4] = mySaturate(                       0.0f - Chassis.leg_situation[LEFT_Leg].vmc.theta, -Theta_L_MAX, Theta_L_MAX);

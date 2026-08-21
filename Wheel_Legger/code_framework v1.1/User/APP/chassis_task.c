@@ -162,13 +162,13 @@ void chassis_feedback_update(void)
 	Chassis.leg_situation[LEFT_Leg].last_wheel_s =   Chassis.leg_situation[LEFT_Leg].wheel_s;
 	Chassis.leg_situation[LEFT_Leg].wheel_s      = -(Chassis.Wheel_Motor[LEFT_Wheel].Data.Velocity/Gear_Ratio/60.0f)*2.0f*PI*wheel_R;
 	Chassis.leg_situation[RIGHT_Leg].last_wheel_s =   Chassis.leg_situation[RIGHT_Wheel].wheel_s;
-	Chassis.leg_situation[RIGHT_Leg].wheel_s      = -(Chassis.Wheel_Motor[RIGHT_Wheel].Data.Velocity/Gear_Ratio/60.0f)*2.0f*PI*wheel_R;
+	Chassis.leg_situation[RIGHT_Leg].wheel_s      = ( Chassis.Wheel_Motor[RIGHT_Wheel].Data.Velocity/Gear_Ratio/60.0f)*2.0f*PI*wheel_R;
 
 	Chassis.body_state.yaw     =  INS.Yaw;
-	Chassis.body_state.d_yaw   =  INS.Gyro[2]*Ang_PI;
-	Chassis.body_state.theta   = -INS.Pitch;
+	Chassis.body_state.d_yaw   =  INS.Gyro[2];
+	Chassis.body_state.theta   =  INS.Pitch;
 	//Chassis.body_state.theta   = 0;
-	Chassis.body_state.d_theta = -INS.Gyro[1];
+	Chassis.body_state.d_theta =  INS.Gyro[1];
 	
 	Chassis.leg_situation[LEFT_Leg].vmc.phi4 =pi/2 +  Chassis.Joint_Motor[LEFT_FRONT_id].Data.pos;
 	Chassis.leg_situation[LEFT_Leg].vmc.phi1 = pi/2 + Chassis.Joint_Motor[LEFT_BACK_id].Data.pos;
@@ -182,28 +182,28 @@ void chassis_feedback_update(void)
 	VMC_calc_1(&Chassis.leg_situation[LEFT_Leg].vmc,&INS,Chassis_Time);
 	VMC_calc_1(&Chassis.leg_situation[RIGHT_Leg].vmc,&INS,Chassis_Time);
 	
-	Chassis.leg_situation[LEFT_Leg].stator_s = Chassis.leg_situation[LEFT_Leg].wheel_s + Chassis.leg_situation[LEFT_Leg].vmc.d_theta; ///未打滑的理想情况下,定子相对于地面的速度
-	Chassis.leg_situation[RIGHT_Leg].stator_s = Chassis.leg_situation[RIGHT_Leg].wheel_s + Chassis.leg_situation[RIGHT_Leg].vmc.d_theta;
+	Chassis.leg_situation[LEFT_Leg].stator_s = Chassis.leg_situation[LEFT_Leg].wheel_s + Chassis.leg_situation[LEFT_Leg].vmc.d_theta*wheel_R; ///未打滑的理想情况下,定子相对于地面的速度
+	Chassis.leg_situation[RIGHT_Leg].stator_s = Chassis.leg_situation[RIGHT_Leg].wheel_s + Chassis.leg_situation[RIGHT_Leg].vmc.d_theta*wheel_R; ///未打滑的理想情况下,定子相对于地面的速度
 	Chassis.leg_situation[LEFT_Leg].swing_s  = Chassis.leg_situation[LEFT_Leg].vmc.d_L0*arm_sin_f32(Chassis.leg_situation[LEFT_Leg].vmc.theta) + Chassis.leg_situation[LEFT_Leg].vmc.L0*(Chassis.leg_situation[LEFT_Leg].vmc.d_theta)*arm_cos_f32(Chassis.leg_situation[LEFT_Leg].vmc.theta); ////摆杆相对于机体的速度
 	Chassis.leg_situation[RIGHT_Leg].swing_s  = Chassis.leg_situation[RIGHT_Leg].vmc.d_L0*arm_sin_f32(Chassis.leg_situation[RIGHT_Leg].vmc.theta) + Chassis.leg_situation[RIGHT_Leg].vmc.L0*(Chassis.leg_situation[RIGHT_Leg].vmc.d_theta)*arm_cos_f32(Chassis.leg_situation[RIGHT_Leg].vmc.theta);
 
 	//车体估计值获取
-	Chassis.body_state.dx   = ( Chassis.leg_situation[LEFT_Leg].stator_s + Chassis.leg_situation[LEFT_Leg].swing_s
+	Chassis.body_state.Estimate_dx   = ( Chassis.leg_situation[LEFT_Leg].stator_s + Chassis.leg_situation[LEFT_Leg].swing_s
 											+ Chassis.leg_situation[RIGHT_Leg].stator_s + Chassis.leg_situation[RIGHT_Leg].swing_s )/2.0f; //估计的车体相对于地面速度
 											
-	Chassis.body_state.d_yaw = (Chassis.leg_situation[RIGHT_Leg].wheel_s - Chassis.leg_situation[LEFT_Leg].wheel_s)/L_wheel; //估计的车体YAW速度
+	Chassis.body_state.Estimate_dyaw   = (Chassis.leg_situation[RIGHT_Leg].wheel_s - Chassis.leg_situation[LEFT_Leg].wheel_s)/L_wheel; //估计的车体YAW速度
 	
-	Chassis.body_state.h    = 0.5f*(Chassis.leg_situation[LEFT_Leg].vmc.L0 + Chassis.leg_situation[RIGHT_Leg].vmc.L0);  //估计的车体高度
+	Chassis.body_state.Estimate_h    = 0.5f*(Chassis.leg_situation[LEFT_Leg].vmc.L0 + Chassis.leg_situation[RIGHT_Leg].vmc.L0);  //估计的车体高度
 
-	if(fabs(Chassis.set_goal.v_set) >= 0.05f)        // 遥控有速度指令（在动）
+	if(fabs(Chassis.set_goal.v_set) >= 0.05f || Chassis.chassis_mode == offline)        // 遥控有速度指令（在动）
 	{
    	 	Chassis.chassis_flag.start_situate_flag = 0;
     	Chassis.body_state.x = 0;                      // 运动中：位置清零，不积分
 	}
-	else if((fabs(Chassis.set_goal.v_set)<=0.05f && fabs(Chassis.body_state.dx)<=0.2f) || Chassis.chassis_flag.start_situate_flag)
+	else if((fabs(Chassis.set_goal.v_set)<=0.05f && fabs(Chassis.body_state.Estimate_dx)<=0.2f) || Chassis.chassis_flag.start_situate_flag)
 	{
     	Chassis.chassis_flag.start_situate_flag = 1;           // 静止：开始/继续积分
-  		Chassis.body_state.x += Chassis.body_state.dx*Chassis_Time*0.001f;       // 位置 += 速度*周期
+  		Chassis.body_state.x += Chassis.body_state.Estimate_dx*Chassis_Time*0.001f;       // 位置 += 速度*周期
 	}
 	else                                  // 其他异常状态
 	{
