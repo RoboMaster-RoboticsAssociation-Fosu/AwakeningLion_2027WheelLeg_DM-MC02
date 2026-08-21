@@ -12,14 +12,9 @@
 #define LEG_PID_MAX_OUT  90.0f //90牛
 #define LEG_PID_MAX_IOUT 0.0f
 
-//角度转弧度
-#define Ang_PI 0.01745329f
-//弧度转角度
-#define PI_Ang 57.2957805f
 
-#define Gear_Ratio 268.0f/17.0f
-#define wheel_R   0.052f //轮子半径(m)
-#define L_wheel  0.488f //两个驱动轮之间距离(m)
+
+
 
 #define LeftWheelT_TO_Current 3330.0f //左轮子力矩转电流
 #define RightWheelT_TO_Current 3330.0f //右轮子力矩转电流
@@ -145,8 +140,7 @@ typedef enum {
 
 
 extern Chassis_Info_Typedef Chassis;
-extern float Find_Min_RADIAN(float measure, float ref);
-extern float mySaturate(float in,float min,float max);
+
 
 
 void chassis_task(void);

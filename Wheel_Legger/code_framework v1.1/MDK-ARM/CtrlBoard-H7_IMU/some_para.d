@@ -1,5 +1,5 @@
-ctrlboard-h7_imu/lqr.o: ..\User\Algorithm\LQR\LQR.c \
-  ..\User\Algorithm\LQR\LQR.h ..\Core\Inc\main.h \
+ctrlboard-h7_imu/some_para.o: ..\User\Algorithm\some_config\some_para.c \
+  ..\User\Algorithm\some_config\some_para.h ..\Core\Inc\main.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal.h \
   ..\Core\Inc\stm32h7xx_hal_conf.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_rcc.h \
@@ -43,22 +43,7 @@ ctrlboard-h7_imu/lqr.o: ..\User\Algorithm\LQR\LQR.c \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_pcd.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_ll_usb.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_pcd_ex.h \
-  ..\User\Bsp\bsp_dwt.h ..\User\APP\INS_task.h \
-  ..\User\Devices\BMI088\BMI088driver.h \
-  ..\User\Algorithm\EKF\QuaternionEKF.h \
-  ..\User\Algorithm\kalman\kalman_filter.h \
-  ..\Drivers\CMSIS\DSP\Include\arm_math.h \
-  ..\Drivers\CMSIS\Include\cmsis_compiler.h \
-  C:\Keil_v5\ARM\ARMCLANG\Bin\..\include\string.h \
-  C:\Keil_v5\ARM\ARMCLANG\Bin\..\include\float.h \
-  C:\Keil_v5\ARM\ARMCLANG\Bin\..\include\stdlib.h \
-  ..\User\APP\chassis_task.h ..\User\Devices\DM_Motor\DM_Motor.h \
-  ..\User\Bsp\bsp_can.h ..\User\Algorithm\PID\pid.h \
-  C:\Keil_v5\ARM\ARMCLANG\Bin\..\include\stdbool.h \
-  ..\User\Devices\DJI_Motor\DJI_Motor.h \
-  ..\Drivers\CMSIS\Device\ST\STM32H7xx\Include\stm32h723xx.h \
-  ..\User\Algorithm\VMC\VMC_calc.h \
-  ..\User\Algorithm\some_config\some_para.h ..\User\Lib\user_lib.h \
+  ..\User\Bsp\bsp_dwt.h ..\User\Lib\user_lib.h \
   ..\Middlewares\Third_Party\FreeRTOS\Source\CMSIS_RTOS\cmsis_os.h \
   ..\Middlewares\Third_Party\FreeRTOS\Source\include\FreeRTOS.h \
   ..\Core\Inc\FreeRTOSConfig.h \

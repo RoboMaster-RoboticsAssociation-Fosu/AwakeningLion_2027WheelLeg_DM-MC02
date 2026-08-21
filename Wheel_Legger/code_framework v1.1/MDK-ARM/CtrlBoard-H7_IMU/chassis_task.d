@@ -75,4 +75,5 @@ ctrlboard-h7_imu/chassis_task.o: ..\User\APP\chassis_task.c \
   ..\Middlewares\Third_Party\FreeRTOS\Source\include\event_groups.h \
   ..\Middlewares\Third_Party\FreeRTOS\Source\include\timers.h \
   ..\User\Lib\user_lib.h ..\Core\Inc\usart.h ..\Core\Inc\main.h \
-  ..\Core\Inc\fdcan.h ..\User\APP\INS_task.h ..\User\Algorithm\LQR\LQR.h
+  ..\Core\Inc\fdcan.h ..\User\APP\INS_task.h ..\User\Algorithm\LQR\LQR.h \
+  ..\User\Algorithm\some_config\some_para.h

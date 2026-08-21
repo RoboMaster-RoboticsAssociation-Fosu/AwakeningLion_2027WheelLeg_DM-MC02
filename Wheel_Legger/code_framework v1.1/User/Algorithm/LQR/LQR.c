@@ -1,6 +1,7 @@
 #include "LQR.h"
 #include "main.h"
 #include "chassis_task.h"
+#include "some_para.h"
 
 extern INS_t INS;
 extern Chassis_Info_Typedef Chassis;
@@ -72,16 +73,22 @@ void LQR_Calc(float L_l,float L_r)
     static float T[4];
     uint8_t i;
 
-    u[0] = mySaturate(                       0.0f -        Chassis.body_state.x,-X_MAX, X_MAX);
-    u[1] =   Chassis.set_goal.v_set -       Chassis.body_state.Estimate_dx;
-    u[2] = mySaturate(Find_Min_RADIAN(INS.Yaw, Chassis.set_goal.yaw_set),-Yaw_MAX, Yaw_MAX);
-    u[3] = Chassis.set_goal.yaw_set_v -     Chassis.body_state.d_yaw;
-    u[4] = mySaturate(                       0.0f - Chassis.leg_situation[LEFT_Leg].vmc.theta, -Theta_L_MAX, Theta_L_MAX);
-    u[5] =                         0 - Chassis.leg_situation[LEFT_Leg].vmc.d_theta;
-    u[6] = mySaturate(                       0.0f - Chassis.leg_situation[RIGHT_Leg].vmc.theta, -Theta_R_MAX, Theta_R_MAX);
-    u[7] =                         0 - Chassis.leg_situation[RIGHT_Leg].vmc.d_theta;
-    u[8] = mySaturate(                       0 -    Chassis.body_state.theta, -Theta_B_MAX, Theta_B_MAX);
-    u[9] =                         0 - Chassis.body_state.d_theta;
+    u[0] = 0.0f                             -           Chassis.body_state.x;
+    u[1] = Chassis.set_goal.v_set           -           Chassis.body_state.Estimate_dx;
+    u[2] = Find_Min_RADIAN(INS.Yaw, Chassis.set_goal.yaw_set);
+    u[3] = Chassis.set_goal.yaw_set_v       -           Chassis.body_state.d_yaw;
+    u[4] = 0.0f                             -           Chassis.leg_situation[LEFT_Leg].vmc.theta;
+    u[5] = 0.0F                             -           Chassis.leg_situation[LEFT_Leg].vmc.d_theta;
+    u[6] = 0.0f                             -           Chassis.leg_situation[RIGHT_Leg].vmc.theta;
+    u[7] = 0.0F                             -           Chassis.leg_situation[RIGHT_Leg].vmc.d_theta;
+    u[8] = 0.0f                             -           Chassis.body_state.theta;
+    u[9] = 0.0F                             -           Chassis.body_state.d_theta;
+
+    mySaturate(&u[0],-X_MAX, X_MAX);
+    mySaturate(&u[2],-Yaw_MAX, Yaw_MAX);
+    mySaturate(&u[4],-Theta_L_MAX, Theta_L_MAX);
+    mySaturate(&u[6],-Theta_R_MAX, Theta_R_MAX);
+    mySaturate(&u[8],-Theta_B_MAX, Theta_B_MAX);
 
     for(i=0; i<4; i++)
     {

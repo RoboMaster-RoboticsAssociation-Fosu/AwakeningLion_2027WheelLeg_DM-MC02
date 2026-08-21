@@ -104,6 +104,8 @@ virtualFolder:
         - path: ../User/Algorithm/FIFO/FIFO.c
         - path: ../User/Algorithm/CRC/CRC.c
         - path: ../User/Algorithm/LQR/LQR.c
+        - path: ../User/Algorithm/some_config/some_para.c
+        - path: ../User/Algorithm/some_config/some_para.h
       folders: []
     - name: DSP
       files:
@@ -204,6 +206,7 @@ targets:
         - ../User/Devices/Stepper_Motor
         - ../User/Devices/PS2_Device
         - ../User/Algorithm/LQR
+        - ../User/Algorithm/some_config
         - .cmsis/include
         - RTE/_CtrlBoard-H7_IMU
       libList: []

@@ -8,6 +8,7 @@
 #include "VMC_calc.h"
 #include "INS_task.h"
 #include "LQR.h"
+#include "some_para.h"
 
 /* 任务运行周期 */
 #define Chassis_Time						3		
@@ -235,7 +236,10 @@ void Chassis_CanTransimit(void)
 		DM_Motor_Ctrl(&LEFT_Joint_Motor_CAN_hfdcan,&Chassis.Joint_Motor[LEFT_BACK_id],0,0,0,0,Chassis.leg_situation[LEFT_Leg].vmc.torque_set[0],Chassis_Time);
 		DM_Motor_Ctrl(&RIGHT_Joint_Motor_CAN_hfdcan,&Chassis.Joint_Motor[RIGHT_FRONT_id],0,0,0,0,-Chassis.leg_situation[RIGHT_Leg].vmc.torque_set[1],Chassis_Time);
 		DM_Motor_Ctrl(&RIGHT_Joint_Motor_CAN_hfdcan,&Chassis.Joint_Motor[RIGHT_BACK_id],0,0,0,0,-Chassis.leg_situation[RIGHT_Leg].vmc.torque_set[0],Chassis_Time);
-
+		
+		Chassis.Wheel_Motor[LEFT_Wheel].Data.SET_Current = Chassis.Wheel_Motor[LEFT_Wheel].wheel_T*LeftWheelT_TO_Current;
+		Chassis.Wheel_Motor[RIGHT_Wheel].Data.SET_Current = Chassis.Wheel_Motor[RIGHT_Wheel].wheel_T*LeftWheelT_TO_Current;
+		
 		DJI_Motor_ctrl(&Chassis.Wheel_Motor,&LEFT_Wheel_CAN_hfdcan,Chassis_Time);
 	}else if(Chassis.chassis_mode == offline)
 	{
@@ -255,40 +259,4 @@ void LEG_Lenth_Control(void)
 	Chassis.leg_situation[RIGHT_Leg].vmc.F0 = PID_Calc(&LegLenth_Right_Pid,Chassis.leg_situation[RIGHT_Leg].vmc.L0,0.2f);
 }
 
-float Find_Min_RADIAN(float measure, float ref)
-{
-	static float a = 0,b = 0;
-	static float min;
-	
-	if(measure>0 && ref<0)
-	{
-		a= 2*PI-measure+ref;
-		b=ref-measure;
-		(a<-b)?(min=a):(min=b);
-	}
-	else if(measure<0 && ref>0)
-	{
-		a=-2*PI-measure+ref;
-		b=ref-measure;
-		(-a<b)?(min=a):(min=b);
-	}
-	else
-	{
-		min = ref - measure;
-	}
-	
-	return min;
-}
 
-float mySaturate(float in,float min,float max)
-{
-  if(in < min)
-  {
-    in = min;
-  }
-  else if(in > max)
-  {
-    in = max;
-  }
-  return in;
-}

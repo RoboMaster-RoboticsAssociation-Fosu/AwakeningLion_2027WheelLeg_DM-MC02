@@ -3,7 +3,7 @@
 <title>Static Call Graph - [CtrlBoard-H7_IMU\CtrlBoard-H7_IMU.axf]</title></head>
 <body><HR>
 <H1>Static Call Graph for image CtrlBoard-H7_IMU\CtrlBoard-H7_IMU.axf</H1><HR>
-<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 6160001: Last Updated: Tue Aug 18 19:36:04 2026
+<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 6160001: Last Updated: Fri Aug 21 21:19:50 2026
 <BR><P>
 <H3>Maximum Stack Usage =        560 bytes + Unknown(Cycles, Untraceable Function Pointers)</H3><H3>
 Call chain for Maximum Stack Depth:</H3>
@@ -776,7 +776,7 @@ Global Symbols
 </UL>
 <BR>[Address Reference Count : 1]<UL><LI> freertos.o(.rodata..L__const.MX_FREERTOS_Init.os_thread_def_CHASSIS_TASK)
 </UL>
-<P><STRONG><a name="[da]"></a>Chassis_CanTransimit</STRONG> (Thumb, 420 bytes, Stack size 48 bytes, chassis_task.o(.text.Chassis_CanTransimit))
+<P><STRONG><a name="[da]"></a>Chassis_CanTransimit</STRONG> (Thumb, 468 bytes, Stack size 48 bytes, chassis_task.o(.text.Chassis_CanTransimit))
 <BR><BR>[Stack]<UL><LI>Max Depth = 304<LI>Call Chain = Chassis_CanTransimit &rArr; DM_Motor_Ctrl &rArr; canx_send_data &rArr; HAL_FDCAN_AddMessageToTxFifoQ &rArr; FDCAN_CopyMessageToRAM
 </UL>
 <BR>[Calls]<UL><LI><a href="#[db]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;DM_Motor_Ctrl
@@ -1006,7 +1006,7 @@ Global Symbols
 </UL>
 <BR>[Address Reference Count : 1]<UL><LI> startup_stm32h723xx.o(RESET)
 </UL>
-<P><STRONG><a name="[1b8]"></a>Find_Min_RADIAN</STRONG> (Thumb, 396 bytes, Stack size 8 bytes, chassis_task.o(.text.Find_Min_RADIAN))
+<P><STRONG><a name="[1b7]"></a>Find_Min_RADIAN</STRONG> (Thumb, 396 bytes, Stack size 8 bytes, some_para.o(.text.Find_Min_RADIAN))
 <BR><BR>[Stack]<UL><LI>Max Depth = 8<LI>Call Chain = Find_Min_RADIAN
 </UL>
 <BR>[Called By]<UL><LI><a href="#[1b5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;LQR_Calc
@@ -2135,19 +2135,19 @@ Global Symbols
 </UL>
 
 <P><STRONG><a name="[1b4]"></a>LQR</STRONG> (Thumb, 24 bytes, Stack size 8 bytes, chassis_task.o(.text.LQR))
-<BR><BR>[Stack]<UL><LI>Max Depth = 72<LI>Call Chain = LQR &rArr; LQR_Calc &rArr; Fitting_K_Calc
+<BR><BR>[Stack]<UL><LI>Max Depth = 88<LI>Call Chain = LQR &rArr; LQR_Calc &rArr; Fitting_K_Calc
 </UL>
 <BR>[Calls]<UL><LI><a href="#[1b5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;LQR_Calc
 </UL>
 <BR>[Called By]<UL><LI><a href="#[d6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;chassis_task
 </UL>
 
-<P><STRONG><a name="[1b5]"></a>LQR_Calc</STRONG> (Thumb, 540 bytes, Stack size 48 bytes, lqr.o(.text.LQR_Calc))
-<BR><BR>[Stack]<UL><LI>Max Depth = 64<LI>Call Chain = LQR_Calc &rArr; Fitting_K_Calc
+<P><STRONG><a name="[1b5]"></a>LQR_Calc</STRONG> (Thumb, 560 bytes, Stack size 64 bytes, lqr.o(.text.LQR_Calc))
+<BR><BR>[Stack]<UL><LI>Max Depth = 80<LI>Call Chain = LQR_Calc &rArr; Fitting_K_Calc
 </UL>
-<BR>[Calls]<UL><LI><a href="#[1b7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mySaturate
+<BR>[Calls]<UL><LI><a href="#[1b8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mySaturate
 <LI><a href="#[1b6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Fitting_K_Calc
-<LI><a href="#[1b8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Find_Min_RADIAN
+<LI><a href="#[1b7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Find_Min_RADIAN
 </UL>
 <BR>[Called By]<UL><LI><a href="#[1b4]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;LQR
 </UL>
@@ -3271,8 +3271,8 @@ Global Symbols
 <LI><a href="#[dc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;DJI_Motor_ctrl
 </UL>
 
-<P><STRONG><a name="[217]"></a>chassis_feedback_update</STRONG> (Thumb, 848 bytes, Stack size 48 bytes, chassis_task.o(.text.chassis_feedback_update))
-<BR><BR>[Stack]<UL><LI>Max Depth = 288<LI>Call Chain = chassis_feedback_update &rArr; VMC_calc_1 &rArr; __hardfp_atan2f
+<P><STRONG><a name="[217]"></a>chassis_feedback_update</STRONG> (Thumb, 844 bytes, Stack size 56 bytes, chassis_task.o(.text.chassis_feedback_update))
+<BR><BR>[Stack]<UL><LI>Max Depth = 296<LI>Call Chain = chassis_feedback_update &rArr; VMC_calc_1 &rArr; __hardfp_atan2f
 </UL>
 <BR>[Calls]<UL><LI><a href="#[210]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;arm_sin_f32
 <LI><a href="#[211]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;arm_cos_f32
@@ -3364,7 +3364,7 @@ Global Symbols
 </UL>
 <BR>[Address Reference Count : 1]<UL><LI> entry9a.o(.ARM.Collect$$$$0000000B)
 </UL>
-<P><STRONG><a name="[1b7]"></a>mySaturate</STRONG> (Thumb, 76 bytes, Stack size 12 bytes, chassis_task.o(.text.mySaturate))
+<P><STRONG><a name="[1b8]"></a>mySaturate</STRONG> (Thumb, 78 bytes, Stack size 12 bytes, some_para.o(.text.mySaturate))
 <BR><BR>[Stack]<UL><LI>Max Depth = 12<LI>Call Chain = mySaturate
 </UL>
 <BR>[Called By]<UL><LI><a href="#[1b5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;LQR_Calc
