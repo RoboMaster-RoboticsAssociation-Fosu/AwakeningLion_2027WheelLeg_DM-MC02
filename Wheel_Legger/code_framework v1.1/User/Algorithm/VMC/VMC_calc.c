@@ -107,7 +107,8 @@ void VMC_calc_1(vmc_leg_t *vmc,INS_t *ins,float dt)//计算theta和d_theta给lqr用，
              - y_c*(d_x_b - vmc->A1*arm_sin_f32(vmc->phi2))) / (vmc->L0*vmc->L0);
 
 		vmc->theta=-(pi/2.0f-PitchR-vmc->phi0);//得到状态变量1
-		vmc->d_theta=(-PithGyroR-vmc->d_phi0);//得到状态变量2
+		//vmc->d_theta=(-PithGyroR-vmc->d_phi0);//得到状态变量2
+		vmc->d_theta = ( PithGyroR + vmc->d_phi0 );
 		
 		vmc->d_alpha=0.0f-vmc->d_phi0 ;
     

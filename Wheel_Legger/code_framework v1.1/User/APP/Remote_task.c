@@ -9,14 +9,14 @@
 /*
 
 			|									|
-        ！！！！|！！！！ch2+						！！！！|！！！！ch0+
+    ！！！！|！！！！ch2+			     ！！！！|！！！！ch0+
 			|									|
 			|									|
 			|									|	
 			ch3+								ch1+
 
 */
-
+#define DT7_TASK_PERIOD_MS  30
 
 void remote_task(void)
 {
@@ -31,18 +31,19 @@ void remote_task(void)
 //			remote_ctrl.rc.last_s2 = remote_ctrl.rc.s2;
 //		}
 		
-		if(remote_ctrl.rc.s2 == 2)
+		if(remote_ctrl.rc.s2 == 2 || remote_ctrl.rc.s2 == 0)
 		{
 			Chassis.chassis_mode = offline;
 
 			Chassis.set_goal.v_set = 0;
 			Chassis.set_goal.yaw_set_v = 0;
-		}else
+		}else if(remote_ctrl.rc.s2 == 1 || remote_ctrl.rc.s2 == 3)
 		{
 			Chassis.chassis_mode = online;
 
-			Chassis.set_goal.v_set = -remote_ctrl.rc.ch3/RC_RESOLUTION*4.0f;
-			Chassis.set_goal.yaw_set_v = remote_ctrl.rc.ch0/RC_RESOLUTION*0.1f;
+			Chassis.set_goal.v_set = (float)remote_ctrl.rc.ch3/RC_RESOLUTION*0.4f;
+			Chassis.set_goal.yaw_set_v = (float)remote_ctrl.rc.ch0/RC_RESOLUTION*0.1f;
 		}
+		osDelay(DT7_TASK_PERIOD_MS);
     }
 }

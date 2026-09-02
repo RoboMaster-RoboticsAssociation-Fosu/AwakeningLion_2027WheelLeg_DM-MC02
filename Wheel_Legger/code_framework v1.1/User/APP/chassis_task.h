@@ -8,16 +8,16 @@
 
 #define LEG_PID_KP  350.0f
 #define LEG_PID_KI  0.0f//锟斤拷锟斤拷锟斤拷
-#define LEG_PID_KD  3000.0f
+#define LEG_PID_KD  500.0f
 #define LEG_PID_MAX_OUT  90.0f //90牛
 #define LEG_PID_MAX_IOUT 0.0f
 
 
-
+#define body_mg 11.0f*9.8f
 
 
 #define LeftWheelT_TO_Current 3330.0f //左轮子力矩转电流
-#define RightWheelT_TO_Current 3330.0f //右轮子力矩转电流
+#define RightWheelT_TO_Current -3330.0f //右轮子力矩转电流
 
 
 #define LEFT_Joint_Motor_CAN_hfdcan  hfdcan2
@@ -103,8 +103,8 @@ typedef enum{
 typedef struct
 {
     DM_Motor_Info_Typedef Joint_Motor[4];
-	DJI_Motor_Info_Typedef Wheel_Motor[2];
-	
+	DJI_Motor_Info_Typedef Wheel_Motor[4];
+ 	
     SetGoal_t set_goal;
 
 	Leg_Situation_t leg_situation[2];

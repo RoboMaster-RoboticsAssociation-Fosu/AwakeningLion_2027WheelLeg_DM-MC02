@@ -73,13 +73,13 @@ typedef __packed struct
     // 遥控器通道数据
     __packed struct
     {
-        float ch0; // 通道0：右摇杆X轴
-        float ch1; // 通道1：右摇杆Y轴
-        float ch2; // 通道2：左摇杆X轴
-        float ch3; // 通道3：左摇杆Y轴
+        int16_t ch0; // 通道0：右摇杆X轴
+        int16_t ch1; // 通道1：右摇杆Y轴
+        int16_t ch2; // 通道2：左摇杆X轴
+        int16_t ch3; // 通道3：左摇杆Y轴
         uint8_t  s1;  // S1开关状态
         uint8_t  s2;  // S2开关状态
-		float iw;
+		int16_t iw;
 		
 		uint8_t  last_s1;  // S1开关状态
         uint8_t  last_s2;  // S2开关状态

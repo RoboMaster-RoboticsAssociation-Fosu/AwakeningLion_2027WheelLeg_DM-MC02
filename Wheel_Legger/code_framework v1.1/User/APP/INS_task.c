@@ -118,7 +118,7 @@ void INS_task(void)
 //			INS.v_n=0.0f;
 //		}
 			
-		if(ins_time>3000.0f) {
+		if(ins_time>1500.0f) {
 			INS.v_n=INS.v_n+INS.MotionAccel_n[1]*0.001f;
 		  	INS.x_n=INS.x_n+INS.v_n*0.001f;
 			INS.ins_flag=1;//单元初始完毕，加速度也初始完毕，此时可以开始积分

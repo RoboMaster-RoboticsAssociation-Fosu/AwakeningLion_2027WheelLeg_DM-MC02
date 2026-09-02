@@ -76,7 +76,7 @@ static uint8_t write_reg_num = 0;               // 多寄存器写入计数
 static uint8_t error = BMI088_NO_ERROR;         // 错误码
 static float gyroDiff[3];                       // 陀螺仪校准数据差异
 static float gNormDiff;                         // 加速度模长校准数据差异
-static uint8_t caliOffset = 1;                  // 校准标志
+static uint8_t caliOffset = 1;                  // 校准标志（参考工程不做加速度偏置减法）
 static int16_t caliCount = 0;                   // 校准计数
 
 // 加速度计初始化配置表
