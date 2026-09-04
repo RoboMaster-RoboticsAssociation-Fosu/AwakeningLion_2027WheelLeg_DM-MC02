@@ -3,10 +3,10 @@
 void VMC_init(vmc_leg_t *vmc)//给杆长赋值
 {
 	vmc->l5=0.0f;//AE长度 //单位为m
-	vmc->l1=0.215f;//单位为m
-	vmc->l2=0.254f;//单位为m
-	vmc->l3=0.254f;//单位为m
-	vmc->l4=0.215f;//单位为m
+	vmc->l1=0.208f;//单位为m
+	vmc->l2=0.25212f;//单位为m
+	vmc->l3=0.25212f;//2单位为m
+	vmc->l4=0.208f;//单位为m
 }
 
 
@@ -66,7 +66,7 @@ void VMC_calc_1(vmc_leg_t *vmc,INS_t *ins,float dt)//计算theta和d_theta给lqr用，
 		static float PitchR=0.0f;
 	  static float PithGyroR=0.0f;
 	  PitchR=ins->Pitch;
-	  PithGyroR=ins->Gyro[1];
+	  PithGyroR=-ins->Gyro[1];
 	
 	  vmc->YD = vmc->l4*arm_sin_f32(vmc->phi4);//D的y坐标
 	  vmc->YB = vmc->l1*arm_sin_f32(vmc->phi1);//B的y坐标
@@ -107,7 +107,6 @@ void VMC_calc_1(vmc_leg_t *vmc,INS_t *ins,float dt)//计算theta和d_theta给lqr用，
              - y_c*(d_x_b - vmc->A1*arm_sin_f32(vmc->phi2))) / (vmc->L0*vmc->L0);
 
 		vmc->theta=-(pi/2.0f-PitchR-vmc->phi0);//得到状态变量1
-		//vmc->d_theta=(-PithGyroR-vmc->d_phi0);//得到状态变量2
 		vmc->d_theta = ( PithGyroR + vmc->d_phi0 );
 		
 		vmc->d_alpha=0.0f-vmc->d_phi0 ;

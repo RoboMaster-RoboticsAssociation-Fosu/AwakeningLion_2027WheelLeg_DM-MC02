@@ -9,7 +9,7 @@
 #define DEBUG						1
 
 /* ϵͳ��ʱ����ʱ��(ms) */
-#define SYS_DELAY_START_TIME		5000
+#define SYS_DELAY_START_TIME		1000
 
 /* Rad ת Ang*/
 #define RAD_TO_ANG					(180.f / PI)

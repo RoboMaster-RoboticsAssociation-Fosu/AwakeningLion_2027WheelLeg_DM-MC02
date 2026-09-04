@@ -8,16 +8,16 @@
 
 #define LEG_PID_KP  350.0f
 #define LEG_PID_KI  0.0f//锟斤拷锟斤拷锟斤拷
-#define LEG_PID_KD  500.0f
+#define LEG_PID_KD  40.0f
 #define LEG_PID_MAX_OUT  90.0f //90牛
 #define LEG_PID_MAX_IOUT 0.0f
 
 
-#define body_mg 11.0f*9.8f
+#define body_mg (11.0f*9.8f)
 
 
-#define LeftWheelT_TO_Current 3330.0f //左轮子力矩转电流
-#define RightWheelT_TO_Current -3330.0f //右轮子力矩转电流
+#define LeftWheelT_TO_Current -3330.0f //左轮子力矩转电流
+#define RightWheelT_TO_Current 3330.0f //右轮子力矩转电流
 
 
 #define LEFT_Joint_Motor_CAN_hfdcan  hfdcan2
@@ -129,8 +129,8 @@ typedef enum {
 } Chassis_Joint_VMC_e;
 
 typedef enum {
-	LEFT_Wheel = 0,
-	RIGHT_Wheel = 1
+	LEFT_Wheel = 1,
+	RIGHT_Wheel = 0
 } Chassis_Wheel_e;
 
 

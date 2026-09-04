@@ -9,6 +9,7 @@
 #include "INS_task.h"
 #include "LQR.h"
 #include "some_para.h"
+#include "bsp_dwt.h"  
 
 /* 任务运行周期 */
 #define Chassis_Time						1		
@@ -25,6 +26,9 @@ void YAW_Parameter_Processing(void);
 
 PidTypedef LegLenth_Left_Pid;
 PidTypedef LegLenth_Right_Pid;
+PidTypedef Yaw_d_Pid;
+
+float fb_dt;
 
 extern INS_t INS;
 Chassis_Info_Typedef Chassis = {
@@ -69,14 +73,14 @@ Chassis_Info_Typedef Chassis = {
 		.Motor_Type = DJI_M3508,
         .ID_Set = {
             .TxIdentifier = Chassis_3508_MotorA_TxID,
-            .RxIdentifier = Chassis_3508_Motor1_RxID,
+            .RxIdentifier = Chassis_3508_Motor2_RxID,
         }
 	},
 	.Wheel_Motor[RIGHT_Wheel] = {
         .Motor_Type = DJI_M3508,
         .ID_Set = {
             .TxIdentifier = Chassis_3508_MotorA_TxID,
-            .RxIdentifier = Chassis_3508_Motor2_RxID,
+            .RxIdentifier = Chassis_3508_Motor1_RxID,
         }
     },
 
@@ -115,6 +119,7 @@ static void Compensate_PID_Init(void)
 {
 	const static float leglenth_right_pid[3] = {LEG_PID_KP, LEG_PID_KI,LEG_PID_KD};
 	const static float leglenth_left_pid[3] = {LEG_PID_KP, LEG_PID_KI,LEG_PID_KD};
+	
  
 	PID_init(&LegLenth_Left_Pid, PID_POSITION,leglenth_left_pid, LEG_PID_MAX_OUT, LEG_PID_MAX_IOUT);//腿长pid
 	PID_init(&LegLenth_Right_Pid, PID_POSITION,leglenth_right_pid, LEG_PID_MAX_OUT, LEG_PID_MAX_IOUT);//腿长pid
@@ -149,16 +154,20 @@ static void Chassis_init(void)
 
 void chassis_feedback_update(void)
 {
+	static uint32_t fb_dwt_cnt = 0;
+	fb_dt = DWT_GetDeltaT(&fb_dwt_cnt);   /* 本周期实际耗时(秒)，DWT实测 */
+	if (fb_dt > 0.05f || fb_dt <= 0.0f)
+		fb_dt = Chassis_Time * 0.001f;          /* 首拍/异常时回退到名义周期 */
 	Chassis.leg_situation[LEFT_Leg].last_wheel_s =   Chassis.leg_situation[LEFT_Leg].wheel_s;
-	Chassis.leg_situation[LEFT_Leg].wheel_s      = -(Chassis.Wheel_Motor[LEFT_Wheel].Data.Velocity/Gear_Ratio/60.0f)*2.0f*PI*wheel_R;
+	Chassis.leg_situation[LEFT_Leg].wheel_s      = -(Chassis.Wheel_Motor[LEFT_Wheel].Data.Velocity/(Gear_Ratio*60.0f))*2.0f*PI*wheel_R;
 	Chassis.leg_situation[RIGHT_Leg].last_wheel_s =   Chassis.leg_situation[RIGHT_Leg].wheel_s;
-	Chassis.leg_situation[RIGHT_Leg].wheel_s      = ( Chassis.Wheel_Motor[RIGHT_Wheel].Data.Velocity/Gear_Ratio/60.0f)*2.0f*PI*wheel_R;
+	Chassis.leg_situation[RIGHT_Leg].wheel_s      = ( Chassis.Wheel_Motor[RIGHT_Wheel].Data.Velocity/(Gear_Ratio*60.0f))*2.0f*PI*wheel_R;
 
 	Chassis.body_state.yaw     =  INS.Yaw;
 	Chassis.body_state.d_yaw   =  INS.Gyro[2];
 	Chassis.body_state.theta   =  INS.Pitch;
-	//Chassis.body_state.theta   = 0;
-	Chassis.body_state.d_theta =  INS.Gyro[1];
+
+	Chassis.body_state.d_theta =  -INS.Gyro[1];
 	
 	Chassis.leg_situation[LEFT_Leg].vmc.phi4 =pi/2 +  Chassis.Joint_Motor[LEFT_FRONT_id].Data.pos;
 	Chassis.leg_situation[LEFT_Leg].vmc.phi1 = pi/2 + Chassis.Joint_Motor[LEFT_BACK_id].Data.pos;
@@ -169,8 +178,8 @@ void chassis_feedback_update(void)
 	Chassis.leg_situation[RIGHT_Leg].vmc.d_phi1 = mirror*Chassis.Joint_Motor[RIGHT_BACK_id].Data.vel;
 	Chassis.leg_situation[RIGHT_Leg].vmc.d_phi4 = mirror*Chassis.Joint_Motor[RIGHT_FRONT_id].Data.vel;
 
-	VMC_calc_1(&Chassis.leg_situation[LEFT_Leg].vmc,&INS,Chassis_Time);
-	VMC_calc_1(&Chassis.leg_situation[RIGHT_Leg].vmc,&INS,Chassis_Time);
+	VMC_calc_1(&Chassis.leg_situation[LEFT_Leg].vmc,&INS,fb_dt);
+	VMC_calc_1(&Chassis.leg_situation[RIGHT_Leg].vmc,&INS,fb_dt);
 	
 	Chassis.leg_situation[LEFT_Leg].stator_s = Chassis.leg_situation[LEFT_Leg].wheel_s + Chassis.leg_situation[LEFT_Leg].vmc.d_theta*wheel_R; ///未打滑的理想情况下,定子相对于地面的速度
 	Chassis.leg_situation[RIGHT_Leg].stator_s = Chassis.leg_situation[RIGHT_Leg].wheel_s + Chassis.leg_situation[RIGHT_Leg].vmc.d_theta*wheel_R; ///未打滑的理想情况下,定子相对于地面的速度
@@ -189,11 +198,12 @@ void chassis_feedback_update(void)
 	{
    	 	Chassis.chassis_flag.start_situate_flag = 0;
     	Chassis.body_state.x = 0;                      // 运动中：位置清零，不积分
+	//	Chassis.body_state.x += Chassis.body_state.Estimate_dx*fb_dt;       // 位置 += 速度*周期
 	}
-	else if((fabs(Chassis.set_goal.v_set)<=0.05f && fabs(Chassis.body_state.Estimate_dx)<=0.2f) || Chassis.chassis_flag.start_situate_flag)
+	else if(((fabs(Chassis.set_goal.v_set)<=0.05f && fabs(Chassis.body_state.Estimate_dx)<=0.2f)) || Chassis.chassis_flag.start_situate_flag)
 	{
     	Chassis.chassis_flag.start_situate_flag = 1;           // 静止：开始/继续积分
-  		Chassis.body_state.x += Chassis.body_state.Estimate_dx*Chassis_Time*0.001f;       // 位置 += 速度*周期
+  		Chassis.body_state.x += Chassis.body_state.Estimate_dx*fb_dt;       // 位置 += 速度*周期
 	}
 	else                                  // 其他异常状态
 	{
@@ -204,7 +214,7 @@ void chassis_feedback_update(void)
 
 void YAW_Parameter_Processing(void)
 {
-	if(Chassis.set_goal.yaw_set_v > 0.005f || Chassis.chassis_mode == offline)
+	if((fabsf(Chassis.set_goal.yaw_set_v) > 0.005f) || Chassis.chassis_mode == offline)
     	{
 			Chassis.set_goal.yaw_set = Chassis.body_state.yaw;
 		}
@@ -230,9 +240,10 @@ void Chassis_CanTransimit(void)
 		mySaturate(&Chassis.leg_situation[RIGHT_Leg].vmc.torque_set[1], J8009_T_MIN, J8009_T_MAX);
 		DM_Motor_Ctrl(&LEFT_Joint_Motor_CAN_hfdcan,&Chassis.Joint_Motor[LEFT_FRONT_id],0,0,0,0,Chassis.leg_situation[LEFT_Leg].vmc.torque_set[1],0);
 		DM_Motor_Ctrl(&LEFT_Joint_Motor_CAN_hfdcan,&Chassis.Joint_Motor[LEFT_BACK_id],0,0,0,0,Chassis.leg_situation[LEFT_Leg].vmc.torque_set[0],0);
+		osDelay(Chassis_Time);
 		DM_Motor_Ctrl(&RIGHT_Joint_Motor_CAN_hfdcan,&Chassis.Joint_Motor[RIGHT_FRONT_id],0,0,0,0,-Chassis.leg_situation[RIGHT_Leg].vmc.torque_set[1],0);
 		DM_Motor_Ctrl(&RIGHT_Joint_Motor_CAN_hfdcan,&Chassis.Joint_Motor[RIGHT_BACK_id],0,0,0,0,-Chassis.leg_situation[RIGHT_Leg].vmc.torque_set[0],0);
-		osDelay(Chassis_Time);
+
 		mySaturate(&Chassis.Wheel_Motor[LEFT_Wheel].wheel_T,-4.8f,4.8f);
 		mySaturate(&Chassis.Wheel_Motor[RIGHT_Wheel].wheel_T,-4.8f,4.8f);
 //		mySaturate(&Chassis.Wheel_Motor[LEFT_Wheel].wheel_T,-0.1f,0.1f);
@@ -257,10 +268,10 @@ void Chassis_CanTransimit(void)
 
 void LEG_Lenth_Control(void)
 {
-//	Chassis.leg_situation[LEFT_Leg].vmc.F0 = body_mg/2.0f*arm_cos_f32(Chassis.leg_situation[LEFT_Leg].vmc.theta)+PID_Calc(&LegLenth_Left_Pid,Chassis.leg_situation[LEFT_Leg].vmc.L0,0.15f);
-//	Chassis.leg_situation[RIGHT_Leg].vmc.F0 = body_mg/2.0f*arm_cos_f32(Chassis.leg_situation[RIGHT_Leg].vmc.theta)+PID_Calc(&LegLenth_Right_Pid,Chassis.leg_situation[RIGHT_Leg].vmc.L0,0.15f);
-	Chassis.leg_situation[LEFT_Leg].vmc.F0 = PID_Calc(&LegLenth_Left_Pid,Chassis.leg_situation[LEFT_Leg].vmc.L0,0.15f);
-	Chassis.leg_situation[RIGHT_Leg].vmc.F0 = PID_Calc(&LegLenth_Right_Pid,Chassis.leg_situation[RIGHT_Leg].vmc.L0,0.15f);
+	Chassis.leg_situation[LEFT_Leg].vmc.F0 = (body_mg/2.0f)*arm_cos_f32(Chassis.leg_situation[LEFT_Leg].vmc.theta)+PID_Calc(&LegLenth_Left_Pid,Chassis.leg_situation[LEFT_Leg].vmc.L0,Chassis.set_goal.set_L0_Left);
+	Chassis.leg_situation[RIGHT_Leg].vmc.F0 = (body_mg/2.0f)*arm_cos_f32(Chassis.leg_situation[RIGHT_Leg].vmc.theta)+PID_Calc(&LegLenth_Right_Pid,Chassis.leg_situation[RIGHT_Leg].vmc.L0,Chassis.set_goal.set_L0_Right);
+//	Chassis.leg_situation[LEFT_Leg].vmc.F0 = PID_Calc(&LegLenth_Left_Pid,Chassis.leg_situation[LEFT_Leg].vmc.L0,0.15f);
+//	Chassis.leg_situation[RIGHT_Leg].vmc.F0 = PID_Calc(&LegLenth_Right_Pid,Chassis.leg_situation[RIGHT_Leg].vmc.L0,0.15f);
 }
 
 

@@ -109,9 +109,9 @@ void MX_FREERTOS_Init(void) {
   osThreadDef(CHASSIS_TASK, CHASSIS_Task, osPriorityAboveNormal, 0, 512);
   CHASSIS_TASKHandle = osThreadCreate(osThread(CHASSIS_TASK), NULL);
 
-  /* definition and creation of PS2_TASK */
-  osThreadDef(PS2_TASK, PS2_Task, osPriorityIdle, 0, 512);
-  PS2_TASKHandle = osThreadCreate(osThread(PS2_TASK), NULL);
+//  /* definition and creation of PS2_TASK */
+//  osThreadDef(PS2_TASK, PS2_Task, osPriorityIdle, 0, 512);
+//  PS2_TASKHandle = osThreadCreate(osThread(PS2_TASK), NULL);
 
   /* definition and creation of REMOTO_TASK */
   osThreadDef(REMOTO_TASK, Remote_Task, osPriorityHigh, 0, 128);
@@ -194,7 +194,7 @@ void PS2_Task(void const * argument)
   for(;;)
   {
 //		PS2_task();
-	  osDelay(1);
+	//  osDelay(1);
 
   }
   /* USER CODE END PS2_Task */

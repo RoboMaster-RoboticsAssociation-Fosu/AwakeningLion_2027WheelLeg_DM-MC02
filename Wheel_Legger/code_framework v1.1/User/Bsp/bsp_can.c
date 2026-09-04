@@ -222,8 +222,8 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 		{
 			
 			
-			case Chassis_3508_Motor1_RxID			:DJI_Motor_Info_Update(&Chassis.Wheel_Motor[LEFT_Wheel],g_Can1RxData,RxHeader1.DataLength);break;
-			case Chassis_3508_Motor2_RxID			:DJI_Motor_Info_Update(&Chassis.Wheel_Motor[RIGHT_Wheel],g_Can1RxData,RxHeader1.DataLength);break;
+			case Chassis_3508_Motor1_RxID			:DJI_Motor_Info_Update(&Chassis.Wheel_Motor[RIGHT_Wheel],g_Can1RxData,RxHeader1.DataLength);break;
+			case Chassis_3508_Motor2_RxID			:DJI_Motor_Info_Update(&Chassis.Wheel_Motor[LEFT_Wheel],g_Can1RxData,RxHeader1.DataLength);break;
 			case JOINT_DM_RIGHT_FRONT_RxID_Set	:DM_Motor_Info_Update(&Chassis.Joint_Motor[RIGHT_FRONT_id],g_Can1RxData,RxHeader1.DataLength);break;
 			case JOINT_DM_RIGHT_BACK_RxID_Set	:DM_Motor_Info_Update(&Chassis.Joint_Motor[RIGHT_BACK_id],g_Can1RxData,RxHeader1.DataLength);break;	
 			
