@@ -26,7 +26,6 @@ void YAW_Parameter_Processing(void);
 
 PidTypedef LegLenth_Left_Pid;
 PidTypedef LegLenth_Right_Pid;
-PidTypedef Yaw_d_Pid;
 
 float fb_dt;
 
@@ -123,6 +122,7 @@ static void Compensate_PID_Init(void)
  
 	PID_init(&LegLenth_Left_Pid, PID_POSITION,leglenth_left_pid, LEG_PID_MAX_OUT, LEG_PID_MAX_IOUT);//ÍÈ³¤pid
 	PID_init(&LegLenth_Right_Pid, PID_POSITION,leglenth_right_pid, LEG_PID_MAX_OUT, LEG_PID_MAX_IOUT);//ÍÈ³¤pid
+	
 }
 
 
@@ -150,6 +150,7 @@ static void Chassis_init(void)
 	VMC_init(&Chassis.leg_situation[RIGHT_Leg].vmc);
 	Compensate_PID_Init();
 	Chassis.chassis_mode = offline;
+	Chassis.set_goal.roll_set = 0.0f;
 }
 
 void chassis_feedback_update(void)
@@ -166,9 +167,10 @@ void chassis_feedback_update(void)
 	Chassis.body_state.yaw     =  INS.Yaw;
 	Chassis.body_state.d_yaw   =  INS.Gyro[2];
 	Chassis.body_state.theta   =  INS.Pitch;
-
 	Chassis.body_state.d_theta =  -INS.Gyro[1];
-	
+	Chassis.body_state.roll = INS.Roll;
+	Chassis.body_state.d_roll = -INS.Gyro[0];
+
 	Chassis.leg_situation[LEFT_Leg].vmc.phi4 =pi/2 +  Chassis.Joint_Motor[LEFT_FRONT_id].Data.pos;
 	Chassis.leg_situation[LEFT_Leg].vmc.phi1 = pi/2 + Chassis.Joint_Motor[LEFT_BACK_id].Data.pos;
 	Chassis.leg_situation[RIGHT_Leg].vmc.phi4 =pi/2 + mirror*Chassis.Joint_Motor[RIGHT_FRONT_id].Data.pos;
@@ -214,7 +216,7 @@ void chassis_feedback_update(void)
 
 void YAW_Parameter_Processing(void)
 {
-	if((fabsf(Chassis.set_goal.yaw_set_v) > 0.005f) || Chassis.chassis_mode == offline)
+	if((fabsf(Chassis.set_goal.yaw_set_v) > 0.1f) || Chassis.chassis_mode == offline)
     	{
 			Chassis.set_goal.yaw_set = Chassis.body_state.yaw;
 		}
@@ -253,7 +255,7 @@ void Chassis_CanTransimit(void)
 		VAL_LIMIT(Chassis.Wheel_Motor[LEFT_Wheel].Data.SET_Current,-16384,16384);
 		VAL_LIMIT(Chassis.Wheel_Motor[RIGHT_Wheel].Data.SET_Current,-16384,16384);
 
-		DJI_Motor_ctrl(Chassis.Wheel_Motor,&LEFT_Wheel_CAN_hfdcan,Chassis_Time);
+		DJI_Motor_ctrl(Chassis.Wheel_Motor,&LEFT_Wheel_CAN_hfdcan,0);
 	}else if(Chassis.chassis_mode == offline)
 	{
 		DM_Motor_Ctrl(&LEFT_Joint_Motor_CAN_hfdcan,&Chassis.Joint_Motor[LEFT_FRONT_id],0,0,0,0,0,Chassis_Time);
@@ -268,8 +270,13 @@ void Chassis_CanTransimit(void)
 
 void LEG_Lenth_Control(void)
 {
-	Chassis.leg_situation[LEFT_Leg].vmc.F0 = (body_mg/2.0f)*arm_cos_f32(Chassis.leg_situation[LEFT_Leg].vmc.theta)+PID_Calc(&LegLenth_Left_Pid,Chassis.leg_situation[LEFT_Leg].vmc.L0,Chassis.set_goal.set_L0_Left);
-	Chassis.leg_situation[RIGHT_Leg].vmc.F0 = (body_mg/2.0f)*arm_cos_f32(Chassis.leg_situation[RIGHT_Leg].vmc.theta)+PID_Calc(&LegLenth_Right_Pid,Chassis.leg_situation[RIGHT_Leg].vmc.L0,Chassis.set_goal.set_L0_Right);
+	float roll_err  = Chassis.set_goal.roll_set - Chassis.body_state.roll;           /* rad£¬EKF ºá¹ö½Ç */
+    float roll_rate = Chassis.set_goal.roll_set_v - Chassis.body_state.d_roll;        /* rad/s£¬ºá¹ö½ÇËÙ¶ÈÖáºÅ/·ûºÅÐèÊµ²âÈ·ÈÏ */
+    float F_roll    = ROLL_PID_KP * roll_err + ROLL_PID_KD * roll_rate;
+	mySaturate(&F_roll,-ROLL_PID_MAX_OUT,ROLL_PID_MAX_OUT);
+	
+	Chassis.leg_situation[LEFT_Leg].vmc.F0 = (body_mg/2.0f)*arm_cos_f32(Chassis.leg_situation[LEFT_Leg].vmc.theta)+PID_Calc(&LegLenth_Left_Pid,Chassis.leg_situation[LEFT_Leg].vmc.L0,Chassis.set_goal.set_L0_Left) + F_roll;
+	Chassis.leg_situation[RIGHT_Leg].vmc.F0 = (body_mg/2.0f)*arm_cos_f32(Chassis.leg_situation[RIGHT_Leg].vmc.theta)+PID_Calc(&LegLenth_Right_Pid,Chassis.leg_situation[RIGHT_Leg].vmc.L0,Chassis.set_goal.set_L0_Right) - F_roll;
 //	Chassis.leg_situation[LEFT_Leg].vmc.F0 = PID_Calc(&LegLenth_Left_Pid,Chassis.leg_situation[LEFT_Leg].vmc.L0,0.15f);
 //	Chassis.leg_situation[RIGHT_Leg].vmc.F0 = PID_Calc(&LegLenth_Right_Pid,Chassis.leg_situation[RIGHT_Leg].vmc.L0,0.15f);
 }

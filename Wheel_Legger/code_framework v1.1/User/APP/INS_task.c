@@ -124,7 +124,7 @@ void INS_task(void)
 			INS.ins_flag=1;//单元初始完毕，加速度也初始完毕，此时可以开始积分
 			// 	获取欧拉角
 
-	  		INS.Roll=mahony.roll;
+	  		INS.Roll=-mahony.roll;
 			INS.Pitch=-mahony.pitch;
 		 	INS.Yaw=mahony.yaw;
 			

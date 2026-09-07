@@ -3,7 +3,7 @@
 <title>Static Call Graph - [CtrlBoard-H7_IMU\CtrlBoard-H7_IMU.axf]</title></head>
 <body><HR>
 <H1>Static Call Graph for image CtrlBoard-H7_IMU\CtrlBoard-H7_IMU.axf</H1><HR>
-<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 6160001: Last Updated: Thu Sep  3 16:36:39 2026
+<BR><P>#&#060CALLGRAPH&#062# ARM Linker, 6160001: Last Updated: Sun Sep  6 22:04:17 2026
 <BR><P>
 <H3>Maximum Stack Usage =        560 bytes + Unknown(Cycles, Untraceable Function Pointers)</H3><H3>
 Call chain for Maximum Stack Depth:</H3>
@@ -2111,7 +2111,7 @@ Global Symbols
 </UL>
 <BR>[Address Reference Count : 1]<UL><LI> freertos.o(.rodata..L__const.MX_FREERTOS_Init.os_thread_def_INS_TASK)
 </UL>
-<P><STRONG><a name="[1af]"></a>INS_task</STRONG> (Thumb, 848 bytes, Stack size 48 bytes, ins_task.o(.text.INS_task))
+<P><STRONG><a name="[1af]"></a>INS_task</STRONG> (Thumb, 856 bytes, Stack size 48 bytes, ins_task.o(.text.INS_task))
 <BR><BR>[Stack]<UL><LI>Max Depth = 208<LI>Call Chain = INS_task &rArr; BMI088_Read &rArr; BMI088_read_muli_reg &rArr; BMI088_read_write_byte &rArr; HAL_SPI_TransmitReceive &rArr; SPI_WaitOnFlagUntilTimeout
 </UL>
 <BR>[Calls]<UL><LI><a href="#[dc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;osDelay
@@ -2128,28 +2128,28 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[b5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;INS_Task
 </UL>
 
-<P><STRONG><a name="[1b2]"></a>LEG_Lenth_Control</STRONG> (Thumb, 132 bytes, Stack size 24 bytes, chassis_task.o(.text.LEG_Lenth_Control))
-<BR><BR>[Stack]<UL><LI>Max Depth = 48<LI>Call Chain = LEG_Lenth_Control &rArr; PID_Calc
+<P><STRONG><a name="[1b2]"></a>LEG_Lenth_Control</STRONG> (Thumb, 240 bytes, Stack size 40 bytes, chassis_task.o(.text.LEG_Lenth_Control))
+<BR><BR>[Stack]<UL><LI>Max Depth = 64<LI>Call Chain = LEG_Lenth_Control &rArr; PID_Calc
 </UL>
-<BR>[Calls]<UL><LI><a href="#[1b4]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;PID_Calc
+<BR>[Calls]<UL><LI><a href="#[da]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mySaturate
+<LI><a href="#[1b4]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;PID_Calc
 <LI><a href="#[1b3]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;arm_cos_f32
 </UL>
 <BR>[Called By]<UL><LI><a href="#[d5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;chassis_task
 </UL>
 
 <P><STRONG><a name="[1b5]"></a>LQR</STRONG> (Thumb, 24 bytes, Stack size 8 bytes, chassis_task.o(.text.LQR))
-<BR><BR>[Stack]<UL><LI>Max Depth = 88<LI>Call Chain = LQR &rArr; LQR_Calc &rArr; Fitting_K_Calc
+<BR><BR>[Stack]<UL><LI>Max Depth = 64<LI>Call Chain = LQR &rArr; LQR_Calc &rArr; Fitting_K_Calc
 </UL>
 <BR>[Calls]<UL><LI><a href="#[1b6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;LQR_Calc
 </UL>
 <BR>[Called By]<UL><LI><a href="#[d5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;chassis_task
 </UL>
 
-<P><STRONG><a name="[1b6]"></a>LQR_Calc</STRONG> (Thumb, 568 bytes, Stack size 64 bytes, lqr.o(.text.LQR_Calc))
-<BR><BR>[Stack]<UL><LI>Max Depth = 80<LI>Call Chain = LQR_Calc &rArr; Fitting_K_Calc
+<P><STRONG><a name="[1b6]"></a>LQR_Calc</STRONG> (Thumb, 450 bytes, Stack size 40 bytes, lqr.o(.text.LQR_Calc))
+<BR><BR>[Stack]<UL><LI>Max Depth = 56<LI>Call Chain = LQR_Calc &rArr; Fitting_K_Calc
 </UL>
-<BR>[Calls]<UL><LI><a href="#[da]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;mySaturate
-<LI><a href="#[1b7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Fitting_K_Calc
+<BR>[Calls]<UL><LI><a href="#[1b7]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Fitting_K_Calc
 <LI><a href="#[1b8]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Find_Min_RADIAN
 </UL>
 <BR>[Called By]<UL><LI><a href="#[1b5]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;LQR
@@ -3268,7 +3268,7 @@ Global Symbols
 <LI><a href="#[dd]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;DJI_Motor_ctrl
 </UL>
 
-<P><STRONG><a name="[216]"></a>chassis_feedback_update</STRONG> (Thumb, 920 bytes, Stack size 56 bytes, chassis_task.o(.text.chassis_feedback_update))
+<P><STRONG><a name="[216]"></a>chassis_feedback_update</STRONG> (Thumb, 936 bytes, Stack size 56 bytes, chassis_task.o(.text.chassis_feedback_update))
 <BR><BR>[Stack]<UL><LI>Max Depth = 296<LI>Call Chain = chassis_feedback_update &rArr; VMC_calc_1 &rArr; __hardfp_atan2f
 </UL>
 <BR>[Calls]<UL><LI><a href="#[210]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;arm_sin_f32
@@ -3365,7 +3365,7 @@ Global Symbols
 <P><STRONG><a name="[da]"></a>mySaturate</STRONG> (Thumb, 78 bytes, Stack size 12 bytes, some_para.o(.text.mySaturate))
 <BR><BR>[Stack]<UL><LI>Max Depth = 12<LI>Call Chain = mySaturate
 </UL>
-<BR>[Called By]<UL><LI><a href="#[1b6]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;LQR_Calc
+<BR>[Called By]<UL><LI><a href="#[1b2]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;LEG_Lenth_Control
 <LI><a href="#[d9]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;Chassis_CanTransimit
 </UL>
 
@@ -3418,7 +3418,7 @@ Global Symbols
 <BR>[Called By]<UL><LI><a href="#[22a]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;prvInitialiseNewTask
 </UL>
 
-<P><STRONG><a name="[1cf]"></a>remote_task</STRONG> (Thumb, 280 bytes, Stack size 8 bytes, remote_task.o(.text.remote_task))
+<P><STRONG><a name="[1cf]"></a>remote_task</STRONG> (Thumb, 368 bytes, Stack size 8 bytes, remote_task.o(.text.remote_task))
 <BR><BR>[Stack]<UL><LI>Max Depth = 124<LI>Call Chain = remote_task &rArr; osDelay &rArr; vTaskDelay &rArr; xTaskResumeAll &rArr; xTaskIncrementTick &rArr; vListInsertEnd
 </UL>
 <BR>[Calls]<UL><LI><a href="#[dc]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;osDelay
@@ -4058,7 +4058,7 @@ Local Symbols
 <BR><BR>[Called By]<UL><LI><a href="#[233]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;xPortStartScheduler
 </UL>
 
-<P><STRONG><a name="[de]"></a>Chassis_init</STRONG> (Thumb, 52 bytes, Stack size 16 bytes, chassis_task.o(.text.Chassis_init))
+<P><STRONG><a name="[de]"></a>Chassis_init</STRONG> (Thumb, 56 bytes, Stack size 16 bytes, chassis_task.o(.text.Chassis_init))
 <BR><BR>[Stack]<UL><LI>Max Depth = 200<LI>Call Chain = Chassis_init &rArr; DM_Enable &rArr; DM_Enable_Motor &rArr; canx_send_data &rArr; HAL_FDCAN_AddMessageToTxFifoQ &rArr; FDCAN_CopyMessageToRAM
 </UL>
 <BR>[Calls]<UL><LI><a href="#[e0]">&gt;&gt;</a>&nbsp;&nbsp;&nbsp;VMC_init

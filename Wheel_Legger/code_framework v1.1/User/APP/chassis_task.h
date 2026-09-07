@@ -6,12 +6,16 @@
 #include "DJI_Motor.h"
 #include "VMC_calc.h"
 
-#define LEG_PID_KP  350.0f
+#define LEG_PID_KP  600.0f
 #define LEG_PID_KI  0.0f//锟斤拷锟斤拷锟斤拷
-#define LEG_PID_KD  40.0f
+#define LEG_PID_KD  4000.0f
 #define LEG_PID_MAX_OUT  90.0f //90牛
 #define LEG_PID_MAX_IOUT 0.0f
 
+#define ROLL_PID_KP 100.0f
+#define ROLL_PID_KD 40.0f
+#define ROLL_PID_MAX_OUT  60.0f
+#define ROLL_PID_MAX_IOUT 0.0f
 
 #define body_mg (11.0f*9.8f)
 
@@ -52,21 +56,15 @@ typedef struct
 
 typedef struct
 {
-	float v;//车体速度，单位是m/s
-	float x;//车体位置，单位是m
-	
-	float dx; //估计的车体相对于地面速度，单位是m/s
-	float h; //估计的车体高度，单位是m
-
-	float myPitch;        // 俯仰角       
-   	float myPitchGyro;    // 俯仰角速度
    	float roll;          // 横滚角
+	float d_roll;         // 横滚角速度
    	float yaw;           // 偏航角度 
 	float d_yaw;         // 偏航角度速度
 
 	float theta;         // 俯仰角度
 	float d_theta;       // 俯仰角度速度
-
+	
+	float x;			//车体位置，单位是m
 	float Estimate_dx; //估计的车体相对于地面速度，单位是m/s
 	float Estimate_h; //估计的车体高度，单位是m
 	float Estimate_dyaw; //估计的车体偏航角度速度，单位是弧度/s
@@ -81,6 +79,8 @@ typedef struct
 	float yaw_set;//期望偏航角度，单位是弧度
 	float yaw_set_v;//期望偏航角度速度，单位是弧度/s
 
+	float roll_set;//期望roll角，单位是弧度
+	float roll_set_v;//期望roll角速度，单位是弧度/s
 
 	float set_L0_Left;//期望腿长，单位是m
 	float set_L0_Right;//期望腿长，单位是m

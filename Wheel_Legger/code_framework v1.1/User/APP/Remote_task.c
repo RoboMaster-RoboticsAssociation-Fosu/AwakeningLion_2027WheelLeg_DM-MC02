@@ -42,15 +42,18 @@ void remote_task(void)
 			Chassis.chassis_mode = online;
 
 			Chassis.set_goal.v_set = (float)remote_ctrl.rc.ch3/RC_RESOLUTION*2.0f;
-			Chassis.set_goal.yaw_set_v = -(float)remote_ctrl.rc.ch0/RC_RESOLUTION*1.0f;
+			Chassis.set_goal.yaw_set_v = -(float)remote_ctrl.rc.ch0/RC_RESOLUTION*3.0f;
 		}
 		
 		if(remote_ctrl.rc.s1 == 2 || remote_ctrl.rc.s1 == 0)
 		{
 			Chassis.set_goal.set_L0_Left = Chassis.set_goal.set_L0_Right = 0.15f;
+		}else if(remote_ctrl.rc.s1 == 1)
+		{
+			Chassis.set_goal.set_L0_Left = Chassis.set_goal.set_L0_Right = 0.3f;
 		}else if(remote_ctrl.rc.s1 == 3)
 		{
-			Chassis.set_goal.set_L0_Left = Chassis.set_goal.set_L0_Right = 0.2f;
+			Chassis.set_goal.set_L0_Left = Chassis.set_goal.set_L0_Right = -(float)remote_ctrl.rc.ch1/RC_RESOLUTION*2.0f + 0.15f;
 		}
 		osDelay(DT7_TASK_PERIOD_MS);
     }

@@ -260,7 +260,7 @@ Leg_data_l = np.array([
 Leg_data_r = Leg_data_l
 
 #                  s    ds      phi   dphi theta_ll     dtheta_ll    theta_lr    dtheta_lr   theta_b   dtheta_b
-lqr_Q = np.diag([100,   50,    500,   50,     100,          5,           100,        5,        20000,      5]).astype(float)
+lqr_Q = np.diag([100,   50,    1000,   50,     100,          5,           100,        5,        20000,      5]).astype(float)
 
 #        T_wl  T_wr  T_bl  T_br
 lqr_R = np.diag([150, 150,  50,   50]).astype(float)
