@@ -340,7 +340,7 @@
               <MiscControls>-Wno-ignored-attributes</MiscControls>
               <Define>USE_HAL_DRIVER,STM32H723xx</Define>
               <Undefine></Undefine>
-              <IncludePath>../Core/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32H7xx/Include;../Drivers/CMSIS/Include;../Drivers/CMSIS/DSP/Include;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS;../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../User/Algorithm/EKF;../User/Algorithm/kalman;../User/Algorithm/mahony;../User/APP;../User/Bsp;../User/Devices/BMI088;../User/Devices/DM_Motor;../User/Algorithm/VMC;../User/Controller;../User/Lib;../User/Algorithm/PID;../User/Algorithm/filter;../User/Devices/Remote_Control;../User/Devices/DJI_Motor;../User/Config;../User/Devices/Unitree_Motor;../User/Algorithm/FIFO;../User/Algorithm/CRC;../USB_DEVICE/App;../USB_DEVICE/Target;../Middlewares/ST/STM32_USB_Device_Library/Core/Inc;../Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc;../User/Devices/PC_Comm;../User/Devices/Stepper_Motor;../User/Devices/PS2_Device;../User/Algorithm/LQR;..\User\Algorithm\some_config</IncludePath>
+              <IncludePath>../Core/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc;../Drivers/STM32H7xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32H7xx/Include;../Drivers/CMSIS/Include;../Drivers/CMSIS/DSP/Include;../Middlewares/Third_Party/FreeRTOS/Source/include;../Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS;../Middlewares/Third_Party/FreeRTOS/Source/portable/RVDS/ARM_CM4F;../User/Algorithm/EKF;../User/Algorithm/kalman;../User/Algorithm/mahony;../User/APP;../User/Bsp;../User/Devices/BMI088;../User/Devices/DM_Motor;../User/Algorithm/VMC;../User/Controller;../User/Lib;../User/Algorithm/PID;../User/Algorithm/filter;../User/Devices/Remote_Control;../User/Devices/DJI_Motor;../User/Config;../User/Devices/Unitree_Motor;../User/Algorithm/FIFO;../User/Algorithm/CRC;../USB_DEVICE/App;../USB_DEVICE/Target;../Middlewares/ST/STM32_USB_Device_Library/Core/Inc;../Middlewares/ST/STM32_USB_Device_Library/Class/CDC/Inc;../User/Devices/PC_Comm;../User/Devices/Stepper_Motor;../User/Devices/PS2_Device;../User/Algorithm/LQR;..\User\Algorithm\some_config;..\User\Algorithm\LESO</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -1264,6 +1264,11 @@
               <FileName>some_para.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\User\Algorithm\some_config\some_para.h</FilePath>
+            </File>
+            <File>
+              <FileName>LESO.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\Algorithm\LESO\LESO.c</FilePath>
             </File>
           </Files>
         </Group>

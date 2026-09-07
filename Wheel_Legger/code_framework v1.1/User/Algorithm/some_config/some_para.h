@@ -12,7 +12,7 @@
 #define PI_Ang 57.2957805f
 
 #define Gear_Ratio 268.0f/17.0f
-#define wheel_R   0.052f //轮子半径(m)
+#define wheel_R   0.058f //轮子半径(m)
 #define L_wheel  0.488f //两个驱动轮之间距离(m)
 
 

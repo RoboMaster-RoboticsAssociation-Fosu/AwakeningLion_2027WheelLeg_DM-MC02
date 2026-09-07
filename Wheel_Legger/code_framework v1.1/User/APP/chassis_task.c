@@ -10,6 +10,7 @@
 #include "LQR.h"
 #include "some_para.h"
 #include "bsp_dwt.h"  
+#include "LESO.h"
 
 /* 任务运行周期 */
 #define Chassis_Time						1		
@@ -101,10 +102,9 @@ void chassis_task(void)
 
 		chassis_feedback_update();
 		
-		
-		
 		YAW_Parameter_Processing();
 		LQR();
+		LESO_Service();
 		LEG_Lenth_Control();
 		VMC_translate();
 		Chassis_CanTransimit();
@@ -250,6 +250,10 @@ void Chassis_CanTransimit(void)
 		mySaturate(&Chassis.Wheel_Motor[RIGHT_Wheel].wheel_T,-4.8f,4.8f);
 //		mySaturate(&Chassis.Wheel_Motor[LEFT_Wheel].wheel_T,-0.1f,0.1f);
 //		mySaturate(&Chassis.Wheel_Motor[RIGHT_Wheel].wheel_T,-0.1f,0.1f);
+		 LESO_Feedback(Chassis.Wheel_Motor[LEFT_Wheel].wheel_T, 
+                        Chassis.Wheel_Motor[RIGHT_Wheel].wheel_T,
+                        Chassis.leg_situation[LEFT_Leg].vmc.Tp,
+                        Chassis.leg_situation[RIGHT_Leg].vmc.Tp);
 		Chassis.Wheel_Motor[LEFT_Wheel].Data.SET_Current = Chassis.Wheel_Motor[LEFT_Wheel].wheel_T*LeftWheelT_TO_Current;
 		Chassis.Wheel_Motor[RIGHT_Wheel].Data.SET_Current = Chassis.Wheel_Motor[RIGHT_Wheel].wheel_T*RightWheelT_TO_Current;
 		VAL_LIMIT(Chassis.Wheel_Motor[LEFT_Wheel].Data.SET_Current,-16384,16384);

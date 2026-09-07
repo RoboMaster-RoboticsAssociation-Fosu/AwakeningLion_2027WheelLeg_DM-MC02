@@ -57,6 +57,7 @@
 "ctrlboard-h7_imu\crc.o"
 "ctrlboard-h7_imu\lqr.o"
 "ctrlboard-h7_imu\some_para.o"
+"ctrlboard-h7_imu\leso.o"
 "..\Drivers\CMSIS\DSP\Lib\ARM\arm_cortexM7lfdp_math.lib"
 "ctrlboard-h7_imu\croutine.o"
 "ctrlboard-h7_imu\event_groups.o"

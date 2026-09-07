@@ -114,7 +114,7 @@ int main(void)
   DWT_Init(480);
   /*���ڳ�ʼ�� */
   BSP_USART_Init();
-  PS2_Init();
+//  PS2_Init();
   /* ϵͳ�ӳ����� */
   HAL_Delay(SYS_DELAY_START_TIME);
   /* BMI088��ʼ�� */
