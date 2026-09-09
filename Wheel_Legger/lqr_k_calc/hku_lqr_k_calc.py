@@ -16,10 +16,10 @@ r"""
       -> J_A = -M^-1·G, J_B = -M^-1·B_raw (等价 MATLAB solve+jacobian,
          --verify-symbolic 可用原版做法交叉验证)
       -> 填装 A(10x10), B(10x4)
-   2) 连续 LQR: P 解代数 Riccati 方程, K = R^-1·BᵀP (等价 MATLAB icare)
+   2) 连续 LQR: P 解代数 Riccati 方程, K = R^-1·B?P (等价 MATLAB icare)
       注: ABK_LQR.py 是 ZOH 离散 + dlqr 版; 同参数同 Q/R 下两者 K 差约 1%。
    3) 变腿长扫频 -> 逐元素 poly22 最小二乘拟合:
-         p(l_l, l_r) = p00 + p10·l_l + p01·l_r + p20·l_l² + p11·l_l·l_r + p02·l_r²
+         p(l_l, l_r) = p00 + p10·l_l + p01·l_r + p20·l_l? + p11·l_l·l_r + p02·l_r?
       输出 40x6 系数表: 第 r 行 = K 展平后第 r 个元素(行主序),
       6 列依次 [p00, p10, p01, p20, p11, p02] (同 MATLAB coeffvalues)。
    4) LESO 扩张状态观测器(同 ABK_LQR.py): 对 ZOH 离散模型(Ts=1ms)把 4 个输入
@@ -29,7 +29,7 @@ r"""
       A_e = [[Ad, Bd], [0, I]] (14x14),  B_e = [Bd; 0] (14x4),  C_e = [I, 0] (10x14)。
 
  机械数据: 惯性用公式估算(圆盘/盒近似), 腿部参数用经验公式或实测表插值。
- 这是拿不到 CAD/实测数据时的临时方案, 数据到位后请替换(开关见 Step 2)。
+ 这是拿不到 CAD/实测数据时的临时方案, 数据到位后请替换(开关见文件顶部)。
 
  运行示例:
    python hku_lqr_k_calc.py                          # 全流程(定腿长 K + 拟合系数)
@@ -40,6 +40,7 @@ r"""
    python hku_lqr_k_calc.py --no-formula-inertia     # 惯性用声明值(而非公式)
    python hku_lqr_k_calc.py --verify-symbolic        # 符号法交叉验证 J_A/J_B
    python hku_lqr_k_calc.py --params R_w=0.06,m_b=12 # 覆盖物理参数
+   (生成哪些数据由文件顶部的 USE_K / USE_L / USE_AD_BD 开关决定, 默认全开)
 
  输出(当前目录, --out-dir 可改, --no-out 关闭), 均为可直接粘贴的 C 数组定义:
    K_fixed.txt              float K[4][10]        定腿长 LQR 增益
@@ -50,6 +51,7 @@ r"""
    L_Fit_Coefficients.txt   float L_Fit[140][6]   L 的 poly22 拟合系数
    Ad_Fit_Coefficients.txt  float Ad_Fit[100][6]  Ad 的 poly22 拟合系数
    Bd_Fit_Coefficients.txt  float Bd_Fit[40][6]   Bd 的 poly22 拟合系数
+   (上面哪些真正生成, 由文件顶部的 USE_K / USE_L / USE_AD_BD 开关决定)
 
  依赖: numpy, scipy, sympy
 ================================================================================
@@ -71,6 +73,18 @@ if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(errors="replace")
     except Exception:
         pass
+
+
+# =============================================================================
+# ★★★ 用户开关（常用项都放这里, 改完直接运行）★★★
+# =============================================================================
+# ---- 输出内容: 1 = 生成该组数据, 0 = 跳过(连计算也跳过, 拟合提速) ----
+USE_K = 1      # LQR 增益 K:   K_fixed.txt + K_Fit_Coefficients.txt
+USE_L = 0      # LESO 增益 L:  L_fixed.txt + L_Fit_Coefficients.txt
+USE_AD_BD = 0  # ZOH 离散模型: Ad/Bd_fixed.txt + Ad/Bd_Fit_Coefficients.txt (拼 A_e/B_e 用)
+# ---- 机械数据来源: 机械给不出 CAD/实测数据时用公式临时估算, 到位后改 0 换实测 ----
+USE_FORMULA_INERTIA = 1   # 1: I_w/I_b/I_z 公式估算(覆盖声明值); 0: 用 PARAMS 声明值
+USE_LEG_FORMULA = 1       # 1: 腿部 lw/lb/Il 用经验公式; 0: 用 LEG_DATA 实测表插值
 
 
 # =============================================================================
@@ -208,12 +222,12 @@ def fill_AB(J_A, J_B, R_w_, R_l_, l_l_, l_r_):
     """由 J_A(5x3)/J_B(5x4) 填装 A(10x10)/B(10x4)。
 
     奇数行(1,3,5,7,9)是运动学: A[r, r+1]=1, 行内其余为 0;
-    偶数行(2,4,6,8,10)是动力学(s̈/φ̈/θ̈), 由 J_A/J_B 组合:
-        行2 (s̈)  = R_w·(ddθwl + ddθwr)/2
-        行4 (φ̈)  = R_w·(-ddθwl + ddθwr)/(2R_l) - l_l·ddθll/(2R_l) + l_r·ddθlr/(2R_l)
+    偶数行(2,4,6,8,10)是动力学(s?/φ?/θ?), 由 J_A/J_B 组合:
+        行2 (s?)  = R_w·(ddθwl + ddθwr)/2
+        行4 (φ?)  = R_w·(-ddθwl + ddθwr)/(2R_l) - l_l·ddθll/(2R_l) + l_r·ddθlr/(2R_l)
         行6/8/10 = ddθll / ddθlr / ddθb (直接取 J_A 第 3/4/5 行)
     只填第 5/7/9 列(对应 theta_ll/theta_lr/theta_b), 其余列(含第 6/8 列,
-    即 φ̇ 中的 dθll/dθlr 项)按原模型置 0 —— 原程序的建模选择, 原样保留。"""
+    即 φ? 中的 dθll/dθlr 项)按原模型置 0 —— 原程序的建模选择, 原样保留。"""
     A = np.zeros((10, 10))
     B = np.zeros((10, 4))
     for idx, p0 in enumerate((4, 6, 8)):          # 0-based 列 4/6/8 <- theta_ll/lr/b
@@ -238,7 +252,7 @@ def fill_AB(J_A, J_B, R_w_, R_l_, l_l_, l_r_):
 
 
 def solve_lqr(A, B, Q, R):
-    """连续时间 LQR: P 解 AᵀP + PA - P·B·R⁻¹·Bᵀ·P + Q = 0, K = R⁻¹·Bᵀ·P。
+    """连续时间 LQR: P 解 A?P + PA - P·B·R??·B?·P + Q = 0, K = R??·B?·P。
     返回 K, ARE 最大残差(应≈0), 闭环特征值最大实部(应<0)。"""
     P = scipy_linalg.solve_continuous_are(A, B, Q, R)
     K = np.linalg.solve(R, B.T @ P)
@@ -257,9 +271,10 @@ def compute_K(params, M_fun, G_fun, Br_fun, Q, R):
 
 # =============================================================================
 # Step 2：机器人参数（可修改；机械数据到位后替换公式/表格）
+# -----------------------------------------------------------------------------
+# 注: 常用开关(USE_K / USE_L / USE_AD_BD / USE_FORMULA_INERTIA / USE_LEG_FORMULA)
+#     已集中放到文件最顶部"★ 用户开关"区, 方便查找。
 # =============================================================================
-USE_FORMULA_INERTIA = 1   # 1: I_w/I_b/I_z 公式估算(覆盖声明值); 0: 用 PARAMS 声明值
-USE_LEG_FORMULA = 1       # 1: 腿部 lw/lb/Il 用经验公式; 0: 用 LEG_DATA 实测表插值
 BODY_L, BODY_H, BODY_W = 0.415, 0.16, 0.260   # 机体包络 长/高/宽 (m), 盒近似用
 
 PARAMS = {
@@ -274,16 +289,16 @@ PARAMS = {
     'm_b': 11.0,         # 机体质量 (kg)
 
     # ---- 转动惯量声明值 (USE_FORMULA_INERTIA=0 时才生效) ----
-    'I_w': 0.000516,     # 驱动轮转动惯量 (kg·m²)
-    'I_b': 0.025,        # 机体转动惯量(俯仰) (kg·m²)
-    'I_z': 0.380,        # z 轴转动惯量 (kg·m²)
+    'I_w': 0.000516,     # 驱动轮转动惯量 (kg·m?)
+    'I_b': 0.025,        # 机体转动惯量(俯仰) (kg·m?)
+    'I_z': 0.380,        # z 轴转动惯量 (kg·m?)
 
     # ---- 定腿长模式默认腿长 (腿部 lw/lb/Il 运行时按来源自动重算, 下方为缺省) ----
     'l_l': 0.20, 'l_wl': 0.0814, 'l_bl': 0.1186, 'I_ll': 0.15,
     'l_r': 0.20, 'l_wr': 0.0814, 'l_br': 0.1186, 'I_lr': 0.15,
 }
 
-# ---- 腿长-腿部参数实测表: [腿长 l (m), lw (m), lb (m), Il (kg·m²)] ----
+# ---- 腿长-腿部参数实测表: [腿长 l (m), lw (m), lb (m), Il (kg·m?)] ----
 # USE_LEG_FORMULA=0 时对本表插值(表内插值, 表外线性外推)。
 # 注意: 目前来自 ABK_LQR.py, 若不是你的实测数据, 拿到测量值后替换。
 LEG_DATA = np.array([
@@ -320,7 +335,7 @@ Q_LQR = np.diag([     100.0,       1.0,      4000.0,       1.0,      125.0,     
 # R 对角线依次对应 4 个输入力矩 (N·m): T_wl(左驱动轮) T_wr(右驱动轮) T_bl(左髋关节) T_br(右髋关节)
 # R 越大越"省力" -> 力矩输出越小、动作越保守。
 #                   T_wl    T_wr    T_bl    T_br
-R_LQR = np.diag([ 1.0,  1.0,   10.0,   10.0])
+R_LQR = np.diag([ 10.0,  10.0,   1.0,   1.0])
 
 # ---- LESO 扩张状态观测器参数 (同 ABK_LQR.py) ----
 Ts = 0.001               # 控制周期 (s), 固件 1 kHz; L 在该周期的 ZOH 离散模型上设计
@@ -333,9 +348,9 @@ LESO_DIST_POLE = 0.985   # 4 个扩张扰动极点, 带宽 ≈ 2.4 Hz (扰动通
 # =============================================================================
 def formula_inertia(p):
     """公式估算转动惯量(覆盖 I_w/I_b/I_z, 返回副本):
-        I_w = 0.5·m_w·R_w²      驱动轮 ≈ 均质圆盘(质量集中轮缘/充气胎时改 1.0 系数)
-        I_b = m_b·(L²+H²)/12    机体 ≈ 均质盒, 绕俯仰轴
-        I_z = m_b·(L²+W²)/12    机体 ≈ 均质盒, 绕偏航轴
+        I_w = 0.5·m_w·R_w?      驱动轮 ≈ 均质圆盘(质量集中轮缘/充气胎时改 1.0 系数)
+        I_b = m_b·(L?+H?)/12    机体 ≈ 均质盒, 绕俯仰轴
+        I_z = m_b·(L?+W?)/12    机体 ≈ 均质盒, 绕偏航轴
     """
     p = dict(p)
     p['I_w'] = 0.5 * p['m_w'] * p['R_w']**2
@@ -345,7 +360,7 @@ def formula_inertia(p):
 
 
 def leg_formula(l):
-    """腿部参数经验公式: lw = 0.782·l − 0.075, lb = 0.218·l + 0.075, Il = 0.4·l + 0.07。
+    """腿部参数经验公式: lw = 0.782·l ? 0.075, lb = 0.218·l + 0.075, Il = 0.4·l + 0.07。
     lw + lb ≡ l(质心把腿长按 78.2%/21.8% 分)。
     注意: Il 这条与实测表相比偏大约 15 倍, 量纲存疑, 仅为临时估计。"""
     return 0.782 * l - 0.075, 0.218 * l + 0.075, 0.4 * l + 0.07
@@ -410,17 +425,21 @@ def leso_gain(Ad, Bd, state_pole, dist_pole):
 # =============================================================================
 # Step 3：变腿长扫频 + poly22 拟合
 # =============================================================================
-def fit_all_coefficients(params, M_fun, G_fun, Br_fun, Q, R, grid):
+def fit_all_coefficients(params, M_fun, G_fun, Br_fun, Q, R, grid,
+                         want=('K', 'L', 'Ad', 'Bd')):
     """遍历 grid 所有左右腿组合(n² 组)逐组求 K、LESO 增益 L 与 ZOH 离散模型 Ad/Bd,
     再逐元素 poly22 拟合。
+    want: 要生成哪些数据('K'/'L'/'Ad'/'Bd' 的子集), 未选中的跳过计算与拟合。
     槽位(均行主序展平): K(l,m)->(l-1)*10+m; L(i,j)->i*10+j; Ad(i,j)->i*10+j; Bd(i,j)->i*4+j。
-    返回 dict {'K'/'L'/'Ad'/'Bd': (coeff, 残差)}, coeff 为 40/140/100/40 行 x 6 列,
+    返回 dict {选中项: (coeff, 残差)}, coeff 为 40/140/100/40 行 x 6 列,
     列序 [p00,p10,p01,p20,p11,p02] (同 MATLAB coeffvalues)。"""
+    want = set(want)
     n = len(grid)
-    K_samples = np.zeros((n * n, 3, 40))
-    L_samples = np.zeros((n * n, 3, 140))
-    Ad_samples = np.zeros((n * n, 3, 100))
-    Bd_samples = np.zeros((n * n, 3, 40))
+    K_samples = np.zeros((n * n, 3, 40)) if 'K' in want else None
+    L_samples = np.zeros((n * n, 3, 140)) if 'L' in want else None
+    Ad_samples = np.zeros((n * n, 3, 100)) if 'Ad' in want else None
+    Bd_samples = np.zeros((n * n, 3, 40)) if 'Bd' in want else None
+    coords = np.zeros((n * n, 2))             # 每个样本的 (l_l, l_r), 供拟合设计矩阵用
 
     unstable = []
     for i in range(n):                        # 左腿
@@ -431,39 +450,50 @@ def fit_all_coefficients(params, M_fun, G_fun, Br_fun, Q, R, grid):
             p.update(l_l=row_l[0], l_wl=row_l[1], l_bl=row_l[2], I_ll=row_l[3],
                      l_r=row_r[0], l_wr=row_r[1], l_br=row_r[2], I_lr=row_r[3])
             idx = i * n + j
-            K_samples[idx, 0] = row_l[0]
-            K_samples[idx, 1] = row_r[0]
-            K, A, B, _, eig_max = compute_K(p, M_fun, G_fun, Br_fun, Q, R)
-            if eig_max >= 0.0:
-                unstable.append((row_l[0], row_r[0], eig_max))
-            K_samples[idx, 2, :] = K.reshape(40)
-            Ad, Bd = c2d(A, B, Ts)
-            L = leso_gain(Ad, Bd, LESO_STATE_POLE, LESO_DIST_POLE)[2]
-            L_samples[idx, 2, :] = L.reshape(140)
-            Ad_samples[idx, 2, :] = Ad.reshape(100)
-            Bd_samples[idx, 2, :] = Bd.reshape(40)
+            coords[idx, 0] = row_l[0]
+            coords[idx, 1] = row_r[0]
+            J_A, J_B = jacobians_numeric(p, M_fun, G_fun, Br_fun)
+            A, B = fill_AB(J_A, J_B, p['R_w'], p['R_l'], p['l_l'], p['l_r'])
+            if 'K' in want:
+                K, _, eig_max = solve_lqr(A, B, Q, R)
+                if eig_max >= 0.0:
+                    unstable.append((row_l[0], row_r[0], eig_max))
+                K_samples[idx, 2, :] = K.reshape(40)
+            if 'L' in want or 'Ad' in want or 'Bd' in want:
+                Ad, Bd = c2d(A, B, Ts)
+                if 'L' in want:
+                    L = leso_gain(Ad, Bd, LESO_STATE_POLE, LESO_DIST_POLE)[2]
+                    L_samples[idx, 2, :] = L.reshape(140)
+                if 'Ad' in want:
+                    Ad_samples[idx, 2, :] = Ad.reshape(100)
+                if 'Bd' in want:
+                    Bd_samples[idx, 2, :] = Bd.reshape(40)
 
     if unstable:
         print(f'  [警告] 有 {len(unstable)} 组腿长闭环不稳定(特征值实部>=0):')
         for ll, lr, em in unstable[:5]:
             print(f'         l_l={ll:.2f}, l_r={lr:.2f}, max Re(eig)={em:.3e}')
 
-    x = K_samples[:, 0, 0]
-    y = K_samples[:, 1, 0]
+    x = coords[:, 0]
+    y = coords[:, 1]
     Phi = np.column_stack([np.ones(n * n), x, y, x**2, x * y, y**2])
     out = {}
     for name, S in (('K', K_samples), ('L', L_samples),
                     ('Ad', Ad_samples), ('Bd', Bd_samples)):
+        if S is None:
+            continue
         C, *_ = np.linalg.lstsq(Phi, S[:, 2, :], rcond=None)
         out[name] = (C.T, np.abs(Phi @ C - S[:, 2, :]))
     return out
 
 
 def eval_fit(coeff, x, y):
-    """用 poly22 系数(40x6)计算 K 的预测值(4x10)。"""
-    return (coeff[:, 0].reshape(4, 10) + coeff[:, 1].reshape(4, 10) * x
-            + coeff[:, 2].reshape(4, 10) * y + coeff[:, 3].reshape(4, 10) * x**2
-            + coeff[:, 4].reshape(4, 10) * x * y + coeff[:, 5].reshape(4, 10) * y**2)
+    """用 poly22 系数计算预测值(行数决定矩阵形状, 均为 10 列:
+    K 40 行->4x10, L 140 行->14x10, Ad 100 行->10x10, Bd 40 行->4x10)。"""
+    n_row = coeff.shape[0] // 10
+    c = [coeff[:, i].reshape(n_row, 10) for i in range(6)]
+    return (c[0] + c[1] * x + c[2] * y
+            + c[3] * x**2 + c[4] * x * y + c[5] * y**2)
 
 
 def interp_check(params, M_fun, G_fun, Br_fun, Q, R, coeff, coeff_L, use_leg_formula=None):
@@ -475,13 +505,17 @@ def interp_check(params, M_fun, G_fun, Br_fun, Q, R, coeff, coeff_L, use_leg_for
         p = {**params, 'l_l': l_test, 'l_wl': lw, 'l_bl': lb, 'I_ll': Il,
                           'l_r': l_test, 'l_wr': lw, 'l_br': lb, 'I_lr': Il}
         K_exact, A_ex, B_ex, _, _ = compute_K(p, M_fun, G_fun, Br_fun, Q, R)
-        L_exact = leso_gain(*c2d(A_ex, B_ex, Ts), LESO_STATE_POLE, LESO_DIST_POLE)[2]
-        errK = float(np.max(np.abs(K_exact - eval_fit(coeff, l_test, l_test))))
-        relK = errK / max(1e-12, float(np.max(np.abs(K_exact))))
-        errL = float(np.max(np.abs(L_exact - eval_fit(coeff_L, l_test, l_test))))
-        relL = errL / max(1e-12, float(np.max(np.abs(L_exact))))
-        print(f'  l={l_test:.3f} m:  K: max|exact-fit| = {errK:.4g} ({relK:.2%})'
-              f';  L: max|exact-fit| = {errL:.4g} ({relL:.2%})')
+        parts = []
+        if coeff is not None:
+            errK = float(np.max(np.abs(K_exact - eval_fit(coeff, l_test, l_test))))
+            relK = errK / max(1e-12, float(np.max(np.abs(K_exact))))
+            parts.append(f'K: max|exact-fit| = {errK:.4g} ({relK:.2%})')
+        if coeff_L is not None:
+            L_exact = leso_gain(*c2d(A_ex, B_ex, Ts), LESO_STATE_POLE, LESO_DIST_POLE)[2]
+            errL = float(np.max(np.abs(L_exact - eval_fit(coeff_L, l_test, l_test))))
+            relL = errL / max(1e-12, float(np.max(np.abs(L_exact))))
+            parts.append(f'L: max|exact-fit| = {errL:.4g} ({relL:.2%})')
+        print(f'  l={l_test:.3f} m:  ' + ';  '.join(parts))
 
 
 # =============================================================================
@@ -556,6 +590,17 @@ def main(argv=None):
     ap.add_argument('--no-out', action='store_true', help='不写结果文件')
     args = ap.parse_args(argv)
 
+    # ---- 按 Step 2 的输出开关决定生成哪些数据 ----
+    want = set()
+    if USE_K:
+        want.add('K')
+    if USE_L:
+        want.add('L')
+    if USE_AD_BD:
+        want.update(('Ad', 'Bd'))
+    if not want:
+        raise SystemExit('USE_K / USE_L / USE_AD_BD 全为 0: 至少要打开一个')
+
     t0 = time.perf_counter()
 
     # ---- Step 0/1: 符号方程 -> M/G/B_raw -> 数值雅可比函数 ----
@@ -598,82 +643,98 @@ def main(argv=None):
                 p.update(l_wr=lw, l_br=lb, I_lr=Il)
         print('  当前参数: ' + ', '.join(f'{k}={v:.6g}' for k, v in p.items()))
 
-        K, A, B, are_resid, eig_max = compute_K(p, M_fun, G_fun, Br_fun, Q_LQR, R_LQR)
-        print_labeled_K(K)
-        print(f'  闭环 max Re(eig(A-BK)) = {eig_max:.4f}  (<0 即稳定)')
-        print(f'  Riccati 方程最大残差   = {are_resid:.3e}  (应接近 0)')
+        if 'K' in want:
+            K, A, B, are_resid, eig_max = compute_K(p, M_fun, G_fun, Br_fun, Q_LQR, R_LQR)
+            print_labeled_K(K)
+            print(f'  闭环 max Re(eig(A-BK)) = {eig_max:.4f}  (<0 即稳定)')
+            print(f'  Riccati 方程最大残差   = {are_resid:.3e}  (应接近 0)')
 
-        block = c_array_block('K', 4, 10, K)
-        print('  ---- C 数组定义, 可直接粘贴进 C ----')
-        print(block)
-        if not args.no_out:
-            write_out(os.path.join(args.out_dir, 'K_fixed.txt'), block)
+            block = c_array_block('K', 4, 10, K)
+            print('  ---- C 数组定义, 可直接粘贴进 C ----')
+            print(block)
+            if not args.no_out:
+                write_out(os.path.join(args.out_dir, 'K_fixed.txt'), block)
+        elif 'L' in want or 'Ad' in want or 'Bd' in want:
+            J_A, J_B = jacobians_numeric(p, M_fun, G_fun, Br_fun)
+            A, B = fill_AB(J_A, J_B, p['R_w'], p['R_l'], p['l_l'], p['l_r'])
 
-        # ---- ZOH 离散模型 + LESO 观测器增益 (只依赖离散模型与极点, 与 K 无关) ----
-        Ad, Bd = c2d(A, B, Ts)
-        A_e, C_e, L = leso_gain(Ad, Bd, LESO_STATE_POLE, LESO_DIST_POLE)
-        poles_obs = np.sort(np.abs(np.linalg.eigvals(A_e - L @ C_e)))
-        print(f'  LESO 自检: 观测器极点模 {poles_obs.min():.4f}~{poles_obs.max():.4f} '
-              f'(设计: 10×{LESO_STATE_POLE} + 4×{LESO_DIST_POLE}), |L|max = {np.abs(L).max():.1f}')
-        block_l = c_array_block('L', 14, 10, L)
-        print('  ---- L: 前 10 行=状态估计增益(s..dtheta_b), 后 4 行=扰动估计(f_wl..f_br) ----')
-        print(block_l)
-        if not args.no_out:
-            write_out(os.path.join(args.out_dir, 'L_fixed.txt'), block_l)
+        if 'L' in want or 'Ad' in want or 'Bd' in want:
+            # ---- ZOH 离散模型 + LESO 观测器增益 (只依赖离散模型与极点, 与 K 无关) ----
+            Ad, Bd = c2d(A, B, Ts)
+        if 'L' in want:
+            A_e, C_e, L = leso_gain(Ad, Bd, LESO_STATE_POLE, LESO_DIST_POLE)
+            poles_obs = np.sort(np.abs(np.linalg.eigvals(A_e - L @ C_e)))
+            print(f'  LESO 自检: 观测器极点模 {poles_obs.min():.4f}~{poles_obs.max():.4f} '
+                  f'(设计: 10×{LESO_STATE_POLE} + 4×{LESO_DIST_POLE}), |L|max = {np.abs(L).max():.1f}')
+            block_l = c_array_block('L', 14, 10, L)
+            print('  ---- L: 前 10 行=状态估计增益(s..dtheta_b), 后 4 行=扰动估计(f_wl..f_br) ----')
+            print(block_l)
+            if not args.no_out:
+                write_out(os.path.join(args.out_dir, 'L_fixed.txt'), block_l)
 
-        print('  ---- Ad/Bd: ZOH 离散模型(Ts=1ms); 固件现场拼装 '
-              'A_e=[[Ad,Bd],[0,I]], B_e=[Bd;0], C_e=[I,0] ----')
-        block_ad = c_array_block('Ad', 10, 10, Ad)
-        print(block_ad)
-        if not args.no_out:
-            write_out(os.path.join(args.out_dir, 'Ad_fixed.txt'), block_ad)
-        block_bd = c_array_block('Bd', 10, 4, Bd)
-        print(block_bd)
-        if not args.no_out:
-            write_out(os.path.join(args.out_dir, 'Bd_fixed.txt'), block_bd)
+        if 'Ad' in want or 'Bd' in want:
+            print('  ---- Ad/Bd: ZOH 离散模型(Ts=1ms); 固件现场拼装 '
+                  'A_e=[[Ad,Bd],[0,I]], B_e=[Bd;0], C_e=[I,0] ----')
+        if 'Ad' in want:
+            block_ad = c_array_block('Ad', 10, 10, Ad)
+            print(block_ad)
+            if not args.no_out:
+                write_out(os.path.join(args.out_dir, 'Ad_fixed.txt'), block_ad)
+        if 'Bd' in want:
+            block_bd = c_array_block('Bd', 10, 4, Bd)
+            print(block_bd)
+            if not args.no_out:
+                write_out(os.path.join(args.out_dir, 'Bd_fixed.txt'), block_bd)
 
     # ===================== 变腿长拟合 =====================
     if args.mode in ('all', 'fit'):
         print('\n===== 变腿长 poly22 拟合 =====')
-        print(f'  样本数 = {len(grid)}² = {len(grid) ** 2}')
-        fits = fit_all_coefficients(params, M_fun, G_fun, Br_fun, Q_LQR, R_LQR, grid)
+        print(f'  样本数 = {len(grid)}? = {len(grid) ** 2}')
+        fits = fit_all_coefficients(params, M_fun, G_fun, Br_fun, Q_LQR, R_LQR, grid, want)
         for name in ('K', 'L', 'Ad', 'Bd'):
+            if name not in fits:
+                continue
             r_ = fits[name][1]
             print(f'  {name} 拟合最大残差 = {float(r_.max()):.4g}, '
                   f'RMS 残差 = {float(np.sqrt(np.mean(r_ ** 2))):.4g}')
-        print('  拟合公式: p(x,y) = p00 + p10*x + p01*y + p20*x² + p11*x*y + p02*y²'
+        print('  拟合公式: p(x,y) = p00 + p10*x + p01*y + p20*x? + p11*x*y + p02*y?'
               '   (x=l_l, y=l_r)')
         print('  行 <-> 元素(均行主序展平): K/Ad 第 r 行=(r//10+1, r%10+1), '
               'L 第 r 行=(r//10+1, r%10+1; 1-100 行=状态估计, 101-140 行=扰动估计), '
               'Bd 第 r 行=(r//4+1, r%4+1)')
         print('  每行 6 列依次为: p00, p10, p01, p20, p11, p02')
 
-        block = c_array_block('P', 40, 6, fits['K'][0])
-        print('\n  ---- C 数组定义, 可直接粘贴进 C ----')
-        print(block)
-        if not args.no_out:
-            write_out(os.path.join(args.out_dir, 'K_Fit_Coefficients.txt'), block)
+        if 'K' in fits:
+            block = c_array_block('P', 40, 6, fits['K'][0])
+            print('\n  ---- C 数组定义, 可直接粘贴进 C ----')
+            print(block)
+            if not args.no_out:
+                write_out(os.path.join(args.out_dir, 'K_Fit_Coefficients.txt'), block)
 
-        block_l = c_array_block('L_Fit', 140, 6, fits['L'][0])
-        print('\n  ---- L 的 poly22 系数, C 数组定义 ----')
-        print(block_l)
-        if not args.no_out:
-            write_out(os.path.join(args.out_dir, 'L_Fit_Coefficients.txt'), block_l)
+        if 'L' in fits:
+            block_l = c_array_block('L_Fit', 140, 6, fits['L'][0])
+            print('\n  ---- L 的 poly22 系数, C 数组定义 ----')
+            print(block_l)
+            if not args.no_out:
+                write_out(os.path.join(args.out_dir, 'L_Fit_Coefficients.txt'), block_l)
 
-        block_ad = c_array_block('Ad_Fit', 100, 6, fits['Ad'][0])
-        print('\n  ---- Ad 的 poly22 系数, C 数组定义 ----')
-        print(block_ad)
-        if not args.no_out:
-            write_out(os.path.join(args.out_dir, 'Ad_Fit_Coefficients.txt'), block_ad)
+        if 'Ad' in fits:
+            block_ad = c_array_block('Ad_Fit', 100, 6, fits['Ad'][0])
+            print('\n  ---- Ad 的 poly22 系数, C 数组定义 ----')
+            print(block_ad)
+            if not args.no_out:
+                write_out(os.path.join(args.out_dir, 'Ad_Fit_Coefficients.txt'), block_ad)
 
-        block_bd = c_array_block('Bd_Fit', 40, 6, fits['Bd'][0])
-        print('\n  ---- Bd 的 poly22 系数, C 数组定义 ----')
-        print(block_bd)
-        if not args.no_out:
-            write_out(os.path.join(args.out_dir, 'Bd_Fit_Coefficients.txt'), block_bd)
+        if 'Bd' in fits:
+            block_bd = c_array_block('Bd_Fit', 40, 6, fits['Bd'][0])
+            print('\n  ---- Bd 的 poly22 系数, C 数组定义 ----')
+            print(block_bd)
+            if not args.no_out:
+                write_out(os.path.join(args.out_dir, 'Bd_Fit_Coefficients.txt'), block_bd)
 
-        interp_check(params, M_fun, G_fun, Br_fun, Q_LQR, R_LQR,
-                     fits['K'][0], fits['L'][0], use_lf)
+        if 'K' in fits or 'L' in fits:
+            interp_check(params, M_fun, G_fun, Br_fun, Q_LQR, R_LQR,
+                         fits.get('K', (None,))[0], fits.get('L', (None,))[0], use_lf)
 
     print(f'\n总耗时 {time.perf_counter() - t0:.2f} s')
 

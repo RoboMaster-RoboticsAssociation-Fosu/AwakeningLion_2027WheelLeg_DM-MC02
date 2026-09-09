@@ -291,7 +291,7 @@ float LP[140][6] =
 -0.36908,  1.1355,  -2.6374,  -1.2078,  1.0315,  2.2129,
 };
 
-float leso_comp_scale = 0.0f;
+float leso_comp_scale = 1.0f;
 const float leso_dlim[4] = {2.0f, 2.0f, 7.0f, 7.0f};
 
 static float Ad_f[100];
@@ -377,7 +377,7 @@ void LESO_Update(LESO_t *o, const float *Ad, const float *Bd, const float *L,
 	  for (j = 0; j < LESO_N_INPUT; j++)
 		  s += Bd[i * LESO_N_INPUT + j] * (o->dh[j] + u[j]);
 	  for (j = 0; j < LESO_N_STATE; j++)
-		  s += L[i * LESO_N_STATE + j] * o->e[i];
+		  s += L[i * LESO_N_STATE + j] * o->e[j];
 	  nx[i] = s;
   }
 
@@ -402,17 +402,28 @@ void LESO_Update(LESO_t *o, const float *Ad, const float *Bd, const float *L,
   y_prev_valid = 1;
 }
 
-static void lesio_mat_calc(float *out, const float coef[][6], int rows, int cols,
+/* Evaluate the poly22 surface of every matrix element.
+ * coef[] is indexed by the FLATTENED element index, so the caller passes the
+ * element count (rows*cols) and there is no separate column loop -- exactly
+ * the convention used by Fitting_K_Calc() in LQR.c.
+ *
+ * The previous rows/cols form wrote rows*cols entries while coef[] was still
+ * indexed by the row counter alone. Callers passed the element count as rows
+ * AND the column count as cols, so it wrote 10x/4x/10x past the end of
+ * Ad_f/Bd_f/L_f and smashed ~6.3 KB of .bss (FreeRTOS task handles, INS,
+ * Fitting_K, the leg PIDs, CAN rx headers, USB buffers). It also replicated
+ * one coefficient row across a whole matrix row, so the matrices were wrong
+ * even inside their own bounds. */
+static void lesio_mat_calc(float *out, const float coef[][6], int count,
 						 float L_l, float L_r)
 {
-  int r, c;
-  for (r = 0; r < rows; r++)
-	  for (c = 0; c < cols; c++)
-	  {
-		  const float *p = coef[r];
-		  out[r * cols + c] = p[0] + p[1] * L_l + p[2] * L_r
-							+ p[3] * L_l * L_l + p[4] * L_l * L_r + p[5] * L_r * L_r;
-	  }
+  int i;
+  for (i = 0; i < count; i++)
+  {
+	  const float *p = coef[i];
+	  out[i] = p[0] + p[1] * L_l + p[2] * L_r
+			 + p[3] * L_l * L_l + p[4] * L_l * L_r + p[5] * L_r * L_r;
+  }
 }
 
  void LESO_Service(void)
@@ -441,9 +452,9 @@ static void lesio_mat_calc(float *out, const float coef[][6], int rows, int cols
       }
 
       /* ��ֵ��ǰ�ȳ��������� */
-      lesio_mat_calc(Ad_f, AdP, 100, 10, L_l, L_r);
-      lesio_mat_calc(Bd_f, BdP,  40,  4, L_l, L_r);
-      lesio_mat_calc(L_f,  LP,  140, 10, L_l, L_r);
+      lesio_mat_calc(Ad_f, AdP, 100, L_l, L_r);   /* Ad 10x10 = 100 elements */
+      lesio_mat_calc(Bd_f, BdP,  40, L_l, L_r);   /* Bd 10x4  =  40 elements */
+      lesio_mat_calc(L_f,  LP,  140, L_l, L_r);   /* L  14x10 = 140 elements */
 
       /* ԭʼ״̬ y[10] ���� ˳��=�ű�A������������������LQR�����ʽ�� */
       y[0] = Chassis.body_state.x;
