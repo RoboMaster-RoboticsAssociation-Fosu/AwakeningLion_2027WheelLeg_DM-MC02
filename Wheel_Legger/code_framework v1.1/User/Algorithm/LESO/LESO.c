@@ -428,7 +428,7 @@ static void lesio_mat_calc(float *out, const float coef[][6], int count,
 
  void LESO_Service(void)
   {
-      uint8_t online_now = (Chassis.chassis_mode == online);
+      uint8_t online_now = (Chassis.chassis_enable == ONLINE && Chassis.chassis_mode == NORMAL);
       uint8_t edge;
       float y[10];
       float comp;

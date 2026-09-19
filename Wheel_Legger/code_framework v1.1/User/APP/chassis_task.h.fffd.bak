@@ -9,11 +9,11 @@
 #define LEG_PID_KP  400.0f
 #define LEG_PID_KI  0.0f
 #define LEG_PID_KD  4000.0f
-/* ÍÈ³¤»·ËÙÂÊÔöÒæ£¬Ö±½Ó×÷ÓÃÔÚ vmc.d_L0 ÉÏ£¬µ¥Î» N*s/m¡£
-   Ô­ LEG_PID_KD ×ß PID_Calc µÄ Kd*(error[0]-error[1])£¬²î·ÖÃ»³ý dt£¬
-   µÈÐ§ËÙÂÊÔöÒæ = LEG_PID_KD * Ñ­»·ÖÜÆÚT¡£T=4ms Ê±Îª 16£¬T=6ms Ê±Îª 24¡£
-   ÏÈ¶ÁÊµ²â fb_dt£¬°´ LEG_PID_KD * fb_dt È¡³õÖµÔÙµ÷¡£
-   ¸Ä³ÉÕâ¸öÐÎÊ½ºóÍÈ³¤»·Î¢·ÖÔöÒæ²»ÔÙËæÑ­»·ÖÜÆÚ±ä»¯¡£ */
+/* ï¿½È³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½æ£¬Ö±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ vmc.d_L0 ï¿½Ï£ï¿½ï¿½ï¿½Î» N*s/mï¿½ï¿½
+   Ô­ LEG_PID_KD ï¿½ï¿½ PID_Calc ï¿½ï¿½ Kd*(error[0]-error[1])ï¿½ï¿½ï¿½ï¿½ï¿½Ã»ï¿½ï¿½ dtï¿½ï¿½
+   ï¿½ï¿½Ð§ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ = LEG_PID_KD * Ñ­ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Tï¿½ï¿½T=4ms Ê±Îª 16ï¿½ï¿½T=6ms Ê±Îª 24ï¿½ï¿½
+   ï¿½È¶ï¿½Êµï¿½ï¿½ fb_dtï¿½ï¿½ï¿½ï¿½ LEG_PID_KD * fb_dt È¡ï¿½ï¿½Öµï¿½Ùµï¿½ï¿½ï¿½
+   ï¿½Ä³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê½ï¿½ï¿½ï¿½È³ï¿½ï¿½ï¿½Î¢ï¿½ï¿½ï¿½ï¿½ï¿½æ²»ï¿½ï¿½ï¿½ï¿½Ñ­ï¿½ï¿½ï¿½ï¿½ï¿½Ú±ä»¯ï¿½ï¿½ */
 #define LEG_PID_KD_RATE  20.0f
 #define LEG_PID_MAX_OUT  90.0f //90Å£
 #define LEG_PID_MAX_IOUT 0.0f
@@ -23,19 +23,19 @@
 #define ROLL_PID_MAX_OUT  60.0f
 #define ROLL_PID_MAX_IOUT 0.0f
 
-#define FALLING_LEG_PID_KP 200.0f
-#define FALLING_LEG_PID_KD 10.0f
+#define FALLING_LEG_PID_KP 10.0f
+#define FALLING_LEG_PID_KD 2.0f
 #define FALLING_LEG_PID_KI 0.0f
 #define FALLING_LEG_PID_MAX_OUT  60.0f
 #define FALLING_LEG_PID_MAX_IOUT 0.0f
 
-#define PHI0_PID_KP 40.0f
+#define PHI0_PID_KP 10.0f
 #define PHI0_PID_KD 5.0f
 #define PHI0_PID_KI 0.0f
 #define PHI0_PID_MAX_OUT  60.0f
 #define PHI0_PID_MAX_IOUT 0.0f
-#define PHI0_RATE_MAX  20.0f
-#define PHI0_SPEED_KP 5.0f
+#define PHI0_RATE_MAX  10.0f
+#define PHI0_SPEED_KP 8.0f
 
 
 
@@ -43,8 +43,8 @@
 #define LEG_MG  14.33f   /* whole-leg weight N (incl. 2 motors); same DM J8009 legs as awake, use their value to start */
 #define SLEG_MG 10.71f   /* lower-leg weight N: only this part pulls along F0 */
 
-#define LeftWheelT_TO_Current -3330.0f //×óÂÖ×ÓÁ¦¾Ø×ªµçÁ÷
-#define RightWheelT_TO_Current 3330.0f //ÓÒÂÖ×ÓÁ¦¾Ø×ªµçÁ÷
+#define LeftWheelT_TO_Current -3330.0f //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½×ªï¿½ï¿½ï¿½ï¿½
+#define RightWheelT_TO_Current 3330.0f //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½×ªï¿½ï¿½ï¿½ï¿½
 
 
 #define LEFT_Joint_Motor_CAN_hfdcan  hfdcan2
@@ -70,53 +70,53 @@ typedef struct
 {	
 	vmc_leg_t vmc;
 
-	float wheel_s;          //ÂÖ×Ó×ªËÙ
+	float wheel_s;          //ï¿½ï¿½ï¿½ï¿½×ªï¿½ï¿½
 	float last_wheel_s;
-	float swing_s;          //°Ú¸ËµÄËÙ¶È
-	float stator_s;					//¶¨×ÓµÄËÙ¶È
+	float swing_s;          //ï¿½Ú¸Ëµï¿½ï¿½Ù¶ï¿½
+	float stator_s;					//ï¿½ï¿½ï¿½Óµï¿½ï¿½Ù¶ï¿½
 	
 }Leg_Situation_t;
 
 typedef struct
 {
-   	float roll;          // ºá¹ö½Ç
-	float d_roll;         // ºá¹ö½ÇËÙ¶È
-   	float yaw;           // Æ«º½½Ç¶È 
-	float d_yaw;         // Æ«º½½Ç¶ÈËÙ¶È
+   	float roll;          // ï¿½ï¿½ï¿½ï¿½ï¿½
+	float d_roll;         // ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ù¶ï¿½
+   	float yaw;           // Æ«ï¿½ï¿½ï¿½Ç¶ï¿½ 
+	float d_yaw;         // Æ«ï¿½ï¿½ï¿½Ç¶ï¿½ï¿½Ù¶ï¿½
 
-	float theta;         // ¸©Ñö½Ç¶È
-	float d_theta;       // ¸©Ñö½Ç¶ÈËÙ¶È
+	float theta;         // ï¿½ï¿½ï¿½ï¿½ï¿½Ç¶ï¿½
+	float d_theta;       // ï¿½ï¿½ï¿½ï¿½ï¿½Ç¶ï¿½ï¿½Ù¶ï¿½
 	
-	float x;			//³µÌåÎ»ÖÃ£¬µ¥Î»ÊÇm
-	float Estimate_dx; //¹À¼ÆµÄ³µÌåÏà¶ÔÓÚµØÃæËÙ¶È£¬µ¥Î»ÊÇm/s
-	float Estimate_h; //¹À¼ÆµÄ³µÌå¸ß¶È£¬µ¥Î»ÊÇm
-	float Estimate_dyaw; //¹À¼ÆµÄ³µÌåÆ«º½½Ç¶ÈËÙ¶È£¬µ¥Î»ÊÇ»¡¶È/s
+	float x;			//ï¿½ï¿½ï¿½ï¿½Î»ï¿½Ã£ï¿½ï¿½ï¿½Î»ï¿½ï¿½m
+	float Estimate_dx; //ï¿½ï¿½ï¿½ÆµÄ³ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Úµï¿½ï¿½ï¿½ï¿½Ù¶È£ï¿½ï¿½ï¿½Î»ï¿½ï¿½m/s
+	float Estimate_h; //ï¿½ï¿½ï¿½ÆµÄ³ï¿½ï¿½ï¿½ß¶È£ï¿½ï¿½ï¿½Î»ï¿½ï¿½m
+	float Estimate_dyaw; //ï¿½ï¿½ï¿½ÆµÄ³ï¿½ï¿½ï¿½Æ«ï¿½ï¿½ï¿½Ç¶ï¿½ï¿½Ù¶È£ï¿½ï¿½ï¿½Î»ï¿½Ç»ï¿½ï¿½ï¿½/s
 
 } BodyState_t;
 
 typedef struct
 {
-	float v_set;//ÆÚÍûËÙ¶È£¬µ¥Î»ÊÇm/s
-	float x_set;//ÆÚÍûÎ»ÖÃ£¬µ¥Î»ÊÇm
+	float v_set;//ï¿½ï¿½ï¿½ï¿½ï¿½Ù¶È£ï¿½ï¿½ï¿½Î»ï¿½ï¿½m/s
+	float x_set;//ï¿½ï¿½ï¿½ï¿½Î»ï¿½Ã£ï¿½ï¿½ï¿½Î»ï¿½ï¿½m
 
-	float yaw_set;//ÆÚÍûÆ«º½½Ç¶È£¬µ¥Î»ÊÇ»¡¶È
-	float yaw_set_v;//ÆÚÍûÆ«º½½Ç¶ÈËÙ¶È£¬µ¥Î»ÊÇ»¡¶È/s
+	float yaw_set;//ï¿½ï¿½ï¿½ï¿½Æ«ï¿½ï¿½ï¿½Ç¶È£ï¿½ï¿½ï¿½Î»ï¿½Ç»ï¿½ï¿½ï¿½
+	float yaw_set_v;//ï¿½ï¿½ï¿½ï¿½Æ«ï¿½ï¿½ï¿½Ç¶ï¿½ï¿½Ù¶È£ï¿½ï¿½ï¿½Î»ï¿½Ç»ï¿½ï¿½ï¿½/s
 
-	float roll_set;//ÆÚÍûroll½Ç£¬µ¥Î»ÊÇ»¡¶È
-	float roll_set_v;//ÆÚÍûroll½ÇËÙ¶È£¬µ¥Î»ÊÇ»¡¶È/s
+	float roll_set;//ï¿½ï¿½ï¿½ï¿½rollï¿½Ç£ï¿½ï¿½ï¿½Î»ï¿½Ç»ï¿½ï¿½ï¿½
+	float roll_set_v;//ï¿½ï¿½ï¿½ï¿½rollï¿½ï¿½ï¿½Ù¶È£ï¿½ï¿½ï¿½Î»ï¿½Ç»ï¿½ï¿½ï¿½/s
 
-	float set_L0_Left;//ÆÚÍûÍÈ³¤£¬µ¥Î»ÊÇm
-	float set_L0_Right;//ÆÚÍûÍÈ³¤£¬µ¥Î»ÊÇm
+	float set_L0_Left;//ï¿½ï¿½ï¿½ï¿½ï¿½È³ï¿½ï¿½ï¿½ï¿½ï¿½Î»ï¿½ï¿½m
+	float set_L0_Right;//ï¿½ï¿½ï¿½ï¿½ï¿½È³ï¿½ï¿½ï¿½ï¿½ï¿½Î»ï¿½ï¿½m
 	
-	float set_phi0_Left;//ÆÚÍû°Ú½Ç£¬µ¥Î»ÊÇ»¡¶È
-	float set_phi0_Right;//ÆÚÍû°Ú½Ç£¬µ¥Î»ÊÇ»¡¶È
+	float set_phi0_Left;//ï¿½ï¿½ï¿½ï¿½ï¿½Ú½Ç£ï¿½ï¿½ï¿½Î»ï¿½Ç»ï¿½ï¿½ï¿½
+	float set_phi0_Right;//ï¿½ï¿½ï¿½ï¿½ï¿½Ú½Ç£ï¿½ï¿½ï¿½Î»ï¿½Ç»ï¿½ï¿½ï¿½
 
 
 } SetGoal_t;
 
 typedef struct
 {
-	uint8_t start_situate_flag;//ÊÇ·ñ¿ªÊ¼/¼ÌÐø»ý·Ö
+	uint8_t start_situate_flag;//ï¿½Ç·ï¿½Ê¼/ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 }Chassis_flag_t;
 
 typedef enum{
@@ -126,8 +126,7 @@ typedef enum{
 typedef enum{
 	FALLING_DOWN,
 	FALLING_TO_NORMAL,
-	NORMAL,
-	ZERO_FORCE,
+	NORMAL
 }Chassis_Mode_e;
 
 
@@ -168,7 +167,7 @@ typedef enum {
 
 
 /*******************************************************************************************************
-Ñ°ÕÒ×îÐ¡»¡¶È
+Ñ°ï¿½ï¿½ï¿½ï¿½Ð¡ï¿½ï¿½ï¿½ï¿½
 ********************************************************************************************************/
 
 

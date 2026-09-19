@@ -106,6 +106,7 @@ virtualFolder:
         - path: ../User/Algorithm/LQR/LQR.c
         - path: ../User/Algorithm/some_config/some_para.c
         - path: ../User/Algorithm/some_config/some_para.h
+        - path: ../User/Algorithm/LESO/LESO.c
       folders: []
     - name: DSP
       files:
@@ -207,6 +208,7 @@ targets:
         - ../User/Devices/PS2_Device
         - ../User/Algorithm/LQR
         - ../User/Algorithm/some_config
+        - ../User/Algorithm/LESO
         - .cmsis/include
         - RTE/_CtrlBoard-H7_IMU
       libList: []

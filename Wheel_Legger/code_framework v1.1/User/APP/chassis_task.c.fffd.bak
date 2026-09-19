@@ -27,7 +27,6 @@ void normal_mode(void);
 void falling_to_down(void);
 void falling_down(void);
 void falling_down_detect(void);
-void zero_force(void);
 
 
 PidTypedef LegLenth_Left_Pid;
@@ -123,10 +122,6 @@ void chassis_task(void)
 		
 		switch(Chassis.chassis_mode)//不同状态下的切换
 		{
-			case ZERO_FORCE:
-			{
-				zero_force();
-			}break;                 /* explicit: ZERO_FORCE must NOT fall into falling_down() */
 			case FALLING_DOWN:
 			{
 				falling_down();
@@ -137,7 +132,7 @@ void chassis_task(void)
 			}break;
 			case NORMAL:
 			{
-				normal_mode();
+//				normal_mode();
 			}break;
 			
 			default:
@@ -378,7 +373,7 @@ void falling_down_detect(void)
 	   phi0_R < 0.4f || phi0_R > 2.5f ||
 	   fabs(Chassis.body_state.theta) > 0.3f)
 	{
-		Chassis.chassis_mode = ZERO_FORCE;   /* fell: go limp, wait for OFF->ON re-arm */
+		Chassis.chassis_mode = FALLING_DOWN;
 	}
 }
 
@@ -425,26 +420,7 @@ void falling_leg_control(void)
 	Chassis.leg_situation[RIGHT_Leg].vmc.Tp =Tp_leg_R;
 }  
 
-void zero_force(void)
-{
-	Chassis.leg_situation[LEFT_Leg].vmc.F0 = 0;
-	Chassis.leg_situation[RIGHT_Leg].vmc.F0 = 0;
-	Chassis.leg_situation[LEFT_Leg].vmc.Tp = 0;
-	Chassis.leg_situation[RIGHT_Leg].vmc.Tp =0;
-	/* Chassis_CanTransimit() takes wheel_T straight from its ONLINE branch, so a
-	   stale LQR value would keep driving the wheels while the legs are limp. */
-	Chassis.Wheel_Motor[LEFT_Wheel].wheel_T  = 0;
-	Chassis.Wheel_Motor[RIGHT_Wheel].wheel_T = 0;
-	if(
-		Chassis.Joint_Motor[LEFT_FRONT_id].Data.state != 1 ||
-		Chassis.Joint_Motor[RIGHT_FRONT_id].Data.state != 1||
-		Chassis.Joint_Motor[RIGHT_BACK_id].Data.state != 1||
-		Chassis.Joint_Motor[LEFT_BACK_id].Data.state != 1)
-	{
-		DM_Enable();
-		osDelay(1);
-	}
-}
+
 
 void normal_mode(void)
 {
@@ -462,15 +438,15 @@ void falling_down(void)
 	Chassis.set_goal.set_phi0_Left = Chassis.leg_situation[LEFT_Leg].vmc.phi0 - 0.3f;
 	Chassis.set_goal.set_phi0_Right = Chassis.leg_situation[RIGHT_Leg].vmc.phi0 - 0.3f;
 	
-	if((Chassis.leg_situation[LEFT_Leg].vmc.theta < 1.3f && Chassis.leg_situation[LEFT_Leg].vmc.theta > -0.5f) && fabs(Chassis.body_state.theta)<0.1f)
+	if((Chassis.leg_situation[LEFT_Leg].vmc.theta < 2.8f && Chassis.leg_situation[LEFT_Leg].vmc.theta > 0.5f) && fabs(Chassis.body_state.theta)<0.1f)
 	{
 		Chassis.set_goal.set_phi0_Left = Chassis.leg_situation[LEFT_Leg].vmc.phi0;
 	}
-	if((Chassis.leg_situation[RIGHT_Leg].vmc.theta < 1.3f && Chassis.leg_situation[RIGHT_Leg].vmc.theta > -0.5f) && fabs(Chassis.body_state.theta)<0.1f)
+	if((Chassis.leg_situation[RIGHT_Leg].vmc.theta < 2.8f && Chassis.leg_situation[RIGHT_Leg].vmc.theta > 0.5f) && fabs(Chassis.body_state.theta)<0.1f)
 	{
 		Chassis.set_goal.set_phi0_Right = Chassis.leg_situation[RIGHT_Leg].vmc.phi0;
 	}
-	if(((Chassis.leg_situation[LEFT_Leg].vmc.theta < 1.3f && Chassis.leg_situation[LEFT_Leg].vmc.theta > -0.5f) && (Chassis.leg_situation[RIGHT_Leg].vmc.theta < 1.3f && Chassis.leg_situation[RIGHT_Leg].vmc.theta > -0.5f)) && (fabs(Chassis.body_state.theta)<0.2f))
+	if(((Chassis.leg_situation[LEFT_Leg].vmc.theta < 2.89f && Chassis.leg_situation[LEFT_Leg].vmc.theta > 0.5f) && (Chassis.leg_situation[RIGHT_Leg].vmc.theta < 2.89f && Chassis.leg_situation[RIGHT_Leg].vmc.theta > 0.5f)) && (fabs(Chassis.body_state.theta)<0.2f))
 	{
 		Chassis.chassis_mode = FALLING_TO_NORMAL;
 	}
@@ -482,27 +458,13 @@ void falling_to_down(void)
 	Chassis.set_goal.set_L0_Right = 0.15f;
 	if(Chassis.leg_situation[LEFT_Leg].vmc.L0 <0.20f && Chassis.leg_situation[RIGHT_Leg].vmc.L0 < 0.20f)
 	{
-		if(Chassis.leg_situation[LEFT_Leg].vmc.theta > 0.5f)
-		{
-			Chassis.set_goal.set_phi0_Left = Chassis.leg_situation[LEFT_Leg].vmc.phi0 - 0.1f;
-		}
-		if(Chassis.leg_situation[RIGHT_Leg].vmc.theta > 0.5f)
-		{
-			Chassis.set_goal.set_phi0_Right = Chassis.leg_situation[RIGHT_Leg].vmc.phi0 - 0.1f;
-		}
-		if((Chassis.leg_situation[LEFT_Leg].vmc.theta < 0.5f && Chassis.leg_situation[LEFT_Leg].vmc.theta > -0.5f)  ) //&& (fabs(Chassis.body_state.theta)<0.8f))
-		{
-			Chassis.set_goal.set_phi0_Left = Chassis.leg_situation[LEFT_Leg].vmc.phi0;
-		}
-		if((Chassis.leg_situation[RIGHT_Leg].vmc.theta < 0.5f && Chassis.leg_situation[RIGHT_Leg].vmc.theta > -0.5f) ) //&& (fabs(Chassis.body_state.theta)<0.8f))
-		{
-			Chassis.set_goal.set_phi0_Right = Chassis.leg_situation[RIGHT_Leg].vmc.phi0;
-		}
+		Chassis.set_goal.set_phi0_Left = 1.7f;
+		Chassis.set_goal.set_phi0_Right = 1.7f;
 	}
 		
 	
 	falling_leg_control();
-	if(fabsf(Chassis.leg_situation[LEFT_Leg].vmc.theta  - 0.5f) < 0.1f && fabsf(Chassis.leg_situation[RIGHT_Leg].vmc.theta - 0.5f) < 0.1f && fabsf(Chassis.body_state.theta) < 0.2f && Chassis.leg_situation[LEFT_Leg].vmc.L0  < 0.20f && Chassis.leg_situation[RIGHT_Leg].vmc.L0 < 0.20f)
+	if((fabs(Chassis.set_goal.set_phi0_Left - Chassis.leg_situation[LEFT_Leg].vmc.phi0) < 0.1f) && (fabs(Chassis.set_goal.set_phi0_Right - Chassis.leg_situation[RIGHT_Leg].vmc.phi0) < 0.1f) && Chassis.leg_situation[LEFT_Leg].vmc.L0 <0.20f && Chassis.leg_situation[RIGHT_Leg].vmc.L0 < 0.20f)
 	{
 		Chassis.chassis_mode = NORMAL;
 	}

@@ -200,6 +200,16 @@
           <WinNumber>1</WinNumber>
           <ItemText>u,0x0A</ItemText>
         </Ww>
+        <Ww>
+          <count>8</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>F_roll</ItemText>
+        </Ww>
+        <Ww>
+          <count>9</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>Tp_leg_L</ItemText>
+        </Ww>
       </WatchWindow1>
       <WatchWindow2>
         <Ww>
