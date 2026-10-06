@@ -17,6 +17,7 @@ extern const float leso_dlim[4];     /* 扰动限幅 N·m [左轮,右轮,左Tp,右Tp] */
 /* 站稳门限（进入注入的条件） */
 #define LESO_GATE_DX      0.1f       /* 机体速度 m/s */
 #define LESO_GATE_DTHETA  0.5f       /* 腿摆角速度 rad/s */
+#define LESO_COMP_RATE    0.003f     /* comp 涓�闃舵枩鍧＄郴鏁帮紝1kHz 涓嬬害 0.33s */
 #define LESO_GATE_TIME    0.5f       /* 持续时间 s */
 
 

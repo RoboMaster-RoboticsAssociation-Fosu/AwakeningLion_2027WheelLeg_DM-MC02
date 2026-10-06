@@ -130,6 +130,13 @@ typedef __packed struct
 
     float t[4];					/* 临时变量 */
 } Ordinary_Least_Squares_t;
+typedef struct {
+    uint32_t start_tick;
+    float last_start;
+    float last_target;
+    float last_duration;
+} Ramp_Typedef;
+float ramp_update(Ramp_Typedef* ctx, float start, float target, float duration_ms, uint8_t flag);
 
 /* Externs ------------------------------------------------------------------ */
 extern uint8_t GlobalDebugMode;	/* 全局调试模式 */

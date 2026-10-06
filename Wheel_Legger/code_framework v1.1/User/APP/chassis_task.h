@@ -6,46 +6,39 @@
 #include "DJI_Motor.h"
 #include "VMC_calc.h"
 /*********************************/
-#define LEG_PID_KP  400.0f
+#define LEG_PID_KP  1600.0f
 #define LEG_PID_KI  0.0f
-#define LEG_PID_KD  4000.0f
+//#define LEG_PID_KD  800.0f
 /* 腿长环速率增益，直接作用在 vmc.d_L0 上，单位 N*s/m。
    原 LEG_PID_KD 走 PID_Calc 的 Kd*(error[0]-error[1])，差分没除 dt，
    等效速率增益 = LEG_PID_KD * 循环周期T。T=4ms 时为 16，T=6ms 时为 24。
    先读实测 fb_dt，按 LEG_PID_KD * fb_dt 取初值再调。
    改成这个形式后腿长环微分增益不再随循环周期变化。 */
-#define LEG_PID_KD_RATE  20.0f
+#define LEG_PID_KD_RATE  300.0f
 #define LEG_PID_MAX_OUT  90.0f //90牛
 #define LEG_PID_MAX_IOUT 0.0f
 
 #define ROLL_PID_KP 340.0f
-#define ROLL_PID_KD 40.0f
+#define ROLL_PID_KD 80.0f
+//#define ROLL_PID_KP 0.0f
+//#define ROLL_PID_KD 0.0f
 #define ROLL_PID_MAX_OUT  60.0f
 #define ROLL_PID_MAX_IOUT 0.0f
 
-#define FALLING_LEG_PID_KP 200.0f
-#define FALLING_LEG_PID_KD 10.0f
-#define FALLING_LEG_PID_KI 0.0f
-#define FALLING_LEG_PID_MAX_OUT  60.0f
-#define FALLING_LEG_PID_MAX_IOUT 0.0f
-
-#define PHI0_PID_KP 40.0f
-#define PHI0_PID_KD 5.0f
-#define PHI0_PID_KI 0.0f
-#define PHI0_PID_MAX_OUT  60.0f
-#define PHI0_PID_MAX_IOUT 0.0f
-#define PHI0_RATE_MAX  20.0f
-#define PHI0_SPEED_KP 5.0f
-
-
-
 #define body_mg (13.0f*9.8f)
-#define LEG_MG  14.33f   /* whole-leg weight N (incl. 2 motors); same DM J8009 legs as awake, use their value to start */
-#define SLEG_MG 10.71f   /* lower-leg weight N: only this part pulls along F0 */
 
 #define LeftWheelT_TO_Current -3330.0f //左轮子力矩转电流
 #define RightWheelT_TO_Current 3330.0f //右轮子力矩转电流
+/*Torque = I / 16384 × 20 × 0.3 / (3591/187) × (268/17)
+       = I × (20/16384) × 0.3 × (187/3591) × (268/17)
+       = I × 0.001221 × 0.3 × 0.05207 × 15.765
+       = I × 0.0003007        [N·m per CAN单位]
+发送端（取倒数）：
 
+
+I = T × 16384/20 / 0.3 × (3591/187) / (268/17)
+  = T × 1 / 0.0003007
+  = T × 3326   ≈ 3330*/
 
 #define LEFT_Joint_Motor_CAN_hfdcan  hfdcan2
 #define RIGHT_Joint_Motor_CAN_hfdcan  hfdcan1

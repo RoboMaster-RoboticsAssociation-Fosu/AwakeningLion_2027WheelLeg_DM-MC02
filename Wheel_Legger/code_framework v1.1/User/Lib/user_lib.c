@@ -471,7 +471,53 @@ float Get_OLS_Smooth(Ordinary_Least_Squares_t *OLS)
 {
     return OLS->k * OLS->x[OLS->Order - 1] + OLS->b;
 }
+/**
+ * 斜坡更新函数
+ * 在指定时间内从初始值线性过渡到目标值
+ *
+ * @param start      初始值
+ * @param target     目标值
+ * @param duration   总时间（毫秒）
+ * @return          当前时刻的值
+ */
 
+float ramp_update(Ramp_Typedef* ctx, float start, float target, float duration_ms, uint8_t flag) {
+    // 检查指针有效性
+    if (ctx == NULL) {
+        return target;
+    }
+
+    // 如果参数改变，重置起始时间
+    if (start != ctx->last_start || target != ctx->last_target ||
+        duration_ms != ctx->last_duration || flag == 1 ) {
+        ctx->start_tick = HAL_GetTick();
+        ctx->last_start = start;
+        ctx->last_target = target;
+        ctx->last_duration = duration_ms;
+    }
+
+    // 检查参数有效性
+    if (duration_ms <= 0.0f) {
+        return target;
+    }
+
+    // 计算已过去的时间
+    uint32_t current_tick = HAL_GetTick();
+    float elapsed_ms;
+
+    if (current_tick >= ctx->start_tick) {
+        elapsed_ms = (float)(current_tick - ctx->start_tick);
+    } else {
+        elapsed_ms = (float)(0xFFFFFFFF - ctx->start_tick + current_tick);
+    }
+
+    if (elapsed_ms >= duration_ms) {
+        return target;
+    }
+
+    float t = elapsed_ms / duration_ms;
+    return start + (target - start) * t;
+}
 /* Private functions ------------------------------------------------------- */
 
 /* Interrupt functions ----------------------------------------------------- */

@@ -1979,6 +1979,11 @@
               <FileType>1</FileType>
               <FilePath>..\User\Controller\controller.c</FilePath>
             </File>
+            <File>
+              <FileName>leg_motion.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\Controller\leg_motion.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

@@ -106,7 +106,7 @@ void MX_FREERTOS_Init(void) {
   INS_TASKHandle = osThreadCreate(osThread(INS_TASK), NULL);
 
   /* definition and creation of CHASSIS_TASK */
-  osThreadDef(CHASSIS_TASK, CHASSIS_Task, osPriorityAboveNormal, 0, 512);
+  osThreadDef(CHASSIS_TASK, CHASSIS_Task, osPriorityAboveNormal, 0, 1024);
   CHASSIS_TASKHandle = osThreadCreate(osThread(CHASSIS_TASK), NULL);
 
 //  /* definition and creation of PS2_TASK */

@@ -47,7 +47,12 @@ void DJI_Motor_ctrl(DJI_Motor_Info_Typedef *DJI_Motor,hcan_t* hcan, uint16_t del
 	data[7] = (uint8_t)(DJI_Motor[3].Data.SET_Current & 0xFF);
 
 	canx_send_data(hcan, DJI_Motor[0].ID_Set.TxIdentifier, data, 8);
-	osDelay(delay_time);
+	/* osDelay(0) 在 FreeRTOS 里等价于 taskYIELD()，不是立即返回：任务会让出
+	   CPU、回到就绪队列末尾，要等调度器再轮到才继续。Chassis_CanTransimit
+	   一拍调 4 次 DM_Motor_Ctrl + 1 次 DJI_Motor_ctrl 且都传 0，等于每个控制
+	   周期主动让出 5 次，实测把 1 ms 的环撑到 6 ms（t_can 占 4.76 ms）。
+	   初始化时真要延时的调用点传的是非 0，行为不变。 */
+	if (delay_time != 0) osDelay(delay_time);
 }
 
 /**

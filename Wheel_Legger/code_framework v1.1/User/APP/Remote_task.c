@@ -51,11 +51,11 @@ void remote_task(void)
 					Chassis.set_goal.set_L0_Left = Chassis.set_goal.set_L0_Right = 0.15f;
 				}else if(remote_ctrl.rc.s1 == 1)
 				{
-					Chassis.set_goal.set_L0_Left = Chassis.set_goal.set_L0_Right = 0.3f;
+					Chassis.set_goal.set_L0_Left = Chassis.set_goal.set_L0_Right = 0.25f;
 				}else if(remote_ctrl.rc.s1 == 3)
 				{
-				Chassis.set_goal.set_L0_Left = Chassis.set_goal.set_L0_Right = -(float)remote_ctrl.rc.ch1/RC_RESOLUTION*2.0f + 0.15f;
-				Chassis.set_goal.set_L0_Left = Chassis.set_goal.set_L0_Right = 0.25f;
+//				Chassis.set_goal.set_L0_Left = Chassis.set_goal.set_L0_Right = -(float)remote_ctrl.rc.ch1/RC_RESOLUTION*2.0f + 0.15f;
+				Chassis.set_goal.set_L0_Left = Chassis.set_goal.set_L0_Right = 0.20f;
 				}
 			}
 		osDelay(DT7_TASK_PERIOD_MS);
