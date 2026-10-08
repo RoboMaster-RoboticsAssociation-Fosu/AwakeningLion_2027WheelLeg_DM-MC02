@@ -1,10 +1,11 @@
 #include "leg_motion.h"
 
+#include <float.h>
 #include <math.h>
 #include <stddef.h>
 
-#define LEG_MOTION_TWO_PI (2.0f * LEG_MOTION_PI)
-#define LEG_MOTION_SAME_POSE_EPSILON_RAD 0.000001f
+#define LEG_MOTION_TWO_PI (2.0f * LEG_MOTION_PI) /* 一整圈的弧度值，用于角度归一化及跨圈展开 */
+#define LEG_MOTION_SAME_POSE_EPSILON_RAD 0.000001f /* 同姿态判定的基础容差（rad），也用于半圈采样歧义检查 */
 
 static float LegMotion_WrapSigned(float angle)
 {
@@ -47,11 +48,7 @@ static uint8_t LegMotion_CommandValid(const LegMotion_Command *command)
     return command != NULL &&
            (command->direction == LEG_MOTION_NEGATIVE ||
             command->direction == LEG_MOTION_POSITIVE) &&
-           (command->angle_mode == LEG_MOTION_ABSOLUTE ||
-            command->angle_mode == LEG_MOTION_RELATIVE) &&
-           isfinite(command->angle_deg) &&
-           (command->angle_mode != LEG_MOTION_RELATIVE ||
-            command->angle_deg >= 0.0f) &&
+           isfinite(command->target_phi0_rad) &&
            isfinite(command->length_m) && command->length_m > 0.0f &&
            command->timeout_ms > 0U;
 }
@@ -109,28 +106,25 @@ LegMotion_Result LegMotion_Run(LegMotion_Context *context,
         {
             return LegMotion_Invalid(context);
         }
-        if (command->angle_mode == LEG_MOTION_RELATIVE)
+        float target = LegMotion_WrapSigned(command->target_phi0_rad -
+                                             LEG_MOTION_PI * 0.5f);
+        /* Whole-turn offsets lose precision as the input magnitude grows.
+         * Apply this allowance only to the initial same-pose decision. */
+        float pose_epsilon = LEG_MOTION_SAME_POSE_EPSILON_RAD +
+            2.0f * FLT_EPSILON * fabsf(command->target_phi0_rad) +
+            2.0f * FLT_EPSILON * fabsf(feedback->phi0_rad);
+        delta = LegMotion_WrapSigned(target - angle);
+        if (fabsf(delta) <= pose_epsilon)
         {
-            delta = (float)command->direction * command->angle_deg *
-                    LEG_MOTION_DEG_TO_RAD;
+            delta = 0.0f;
         }
-        else
+        else if (command->direction == LEG_MOTION_POSITIVE && delta < 0.0f)
         {
-            float target = fmodf(command->angle_deg, 360.0f) *
-                           LEG_MOTION_DEG_TO_RAD;
-            delta = LegMotion_WrapSigned(target - angle);
-            if (fabsf(delta) <= LEG_MOTION_SAME_POSE_EPSILON_RAD)
-            {
-                delta = 0.0f;
-            }
-            else if (command->direction == LEG_MOTION_POSITIVE && delta < 0.0f)
-            {
-                delta += LEG_MOTION_TWO_PI;
-            }
-            else if (command->direction == LEG_MOTION_NEGATIVE && delta > 0.0f)
-            {
-                delta -= LEG_MOTION_TWO_PI;
-            }
+            delta += LEG_MOTION_TWO_PI;
+        }
+        else if (command->direction == LEG_MOTION_NEGATIVE && delta > 0.0f)
+        {
+            delta -= LEG_MOTION_TWO_PI;
         }
         if (!isfinite(delta) || !isfinite(angle + delta))
         {

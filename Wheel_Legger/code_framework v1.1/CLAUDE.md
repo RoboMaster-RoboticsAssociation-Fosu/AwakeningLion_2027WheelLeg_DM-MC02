@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-正文中文，写给下一个会话，也给人看。最后更新：2026-10-05。
+正文中文，写给下一个会话，也给人看。最后更新：2026-10-08。
 
 达妙 DM-MC02 板（STM32H723VG）上的双轮腿平衡机器人固件：CubeMX 生成的 HAL + FreeRTOS（CMSIS-RTOS v1），用 Keil MDK 编译。
 git 仓库根在上两级 `wheel_legger/`；离线算增益的 Python 脚本在上一级（`../ABK_LQR.py`、`../lqr_k_calc/`，见 §2.5）。
@@ -36,7 +36,7 @@ tail -3 MDK-ARM/build.log        # -o 的路径相对工程目录 MDK-ARM/
 - 编译产物、`.uvguix.*`、`.uvoptx` 都在 git 里，编一次就会改动几十个二进制文件，提交时要挑着加。
 - 烧录：在 Keil 里 Download，调试器配的是 CMSIS-DAP。根目录的 `flash.bat` / `flash.jlink`（J-Link）在本机用不了：JLink 路径写的是 `D:\Keil_v5-536\…`（本机实际在 `C:\Keil_v5\ARM\Segger\JLink.exe`），要烧的 EIDE 产物 `build/CtrlBoard-H7_IMU/*.hex` 也不存在。
 - 单腿动作与底盘自起阶段的主机 C 验证为 `node mdk_check/leg_motion_verify.js`，需 Node.js 和 C99 主机编译器（默认 gcc）。覆盖及实车边界见 [自起交接](projectmd/LEG_MOTION_HANDOFF.md)。离线 VMC 数值校验使用 `node mdk_check/vmc_verify.js` 和 `node mdk_check/jacobian_verify.js`，用有限差分核对 `VMC_calc.c` 的 dL0/dphi0 解析式和 `VMC_calc_2` 的雅可比。脚本里的杆长（0.215/0.254）和固件（0.208/0.25212）不一样，所以只能验公式，验不了数值。
-- 其余只能上车看：用 Keil 调试器 Watch 全局变量，例如 `fb_dt`、`t_fb/t_mode/t_leso/t_can/t_sum`（`chassis_task.c` 里的临时插桩）、`leso_dbg_*`、`chassis_leg_motion[0]/[1]`。
+- 其余只能上车看：用 Keil 调试器 Watch 全局变量，例如 `fb_dt`、`t_fb/t_mode/t_leso/t_can/t_sum`（`chassis_task.c` 里的临时插桩）、`leso_dbg_*`、`chassis_recovery.motion[0]/[1]`、`chassis_recovery.phase[0]/[1]`。
 
 ## 2. 架构
 
@@ -81,19 +81,20 @@ tail -3 MDK-ARM/build.log        # -o 的路径相对工程目录 MDK-ARM/
 
 ### 2.6 倒地 / 自启状态机（`chassis_mode`）
 
-修改自起阶段、重启、超时或交接时，先读 [倒地自起封装交接](projectmd/LEG_MOTION_HANDOFF.md)；调用单腿动作接口时，读 [LEG_MOTION.md](projectmd/LEG_MOTION.md)。前者记录阶段边界、验证结果和实车续接事项，后者记录命令参数与调用示例。
+继续 2026-10-08 自起工作时，先读 [最新工作交接](projectmd/WORK_HANDOFF_2026-10-08_RECOVERY.md)。修改自起阶段、重启、超时或交接时，先读 [倒地自起封装交接](projectmd/LEG_MOTION_HANDOFF.md)；调用单腿动作接口时，读 [LEG_MOTION.md](projectmd/LEG_MOTION.md)。前者记录阶段边界、验证结果和实车续接事项，后者记录命令参数与调用示例。
 
 ```text
-OFF→ON 位姿判为倒地 → FALLING_DOWN（两腿各自 SWING → RETRACT → HOLD）
+OFF→ON 位姿判为倒地 → FALLING_DOWN（两腿各自 SWING → RETRACT → WAIT_ALIGN）
+两腿均 WAIT_ALIGN → 下一拍同启 ALIGN → 各自 HOLD
 两腿均 HOLD → FALLING_TO_NORMAL（保持 + 交接条件）→ NORMAL
 在线 NORMAL 判为倒地 → ZERO_FORCE，等待 OFF→ON
 自起超时、无效反馈或自起映射异常 → 当周期 ZERO_FORCE
 ```
 
 - `falling_down_detect()` 保留开启时位姿复检：任一腿 phi0 ∉ [0.4, 2.5]，或 |pitch| > 0.3，则进 FALLING_DOWN；其余情况进 NORMAL。在线 NORMAL 持续检测，超出范围进入 ZERO_FORCE。
-- 当前单腿控制实现为 `User/Controller/leg_motion.c/.h` 的 `LegMotion_Run()`，通过底盘适配函数接入。旧级联倒地控制实现及对应 PID 对象已清理。
-- `SPIN_SWEEP_DIR` 当前为 `LEG_MOTION_NEGATIVE`；`SPIN_TARGET_ANGLE_DEG` 为绝对姿态 +39.143°，对应 phi0≈2.254 rad。原方向 -1、角量 5.6 rad 的末姿与此等价；新参数以度表示绝对姿态，详见交接文档。
-- 两腿收腿阶段分别锁存，保持进入收腿时的实际角度；当前收腿参考变化时间 1 s。交接检查包括原正常 phi0 范围。
+- 单腿控制由 `User/Controller/leg_motion.c/.h` 的 `LegMotion_Run()` 实现。自起阶段、计时和交接判断集中在 `User/Controller/chassis_recovery.c/.h`；`falling_down()` 和 `falling_to_down()` 均只调用 `chassis_recovery_control()`，由适配函数传入反馈、回写输出并切换底盘模式。旧级联倒地控制实现及对应 PID 对象已清理。
+- 单腿命令直接指定 `target_phi0_rad`、方向、共同斜坡时间、目标腿长和总超时；phi0 为 VMC 坐标弧度，竖直向下为 π/2，同姿态不额外转圈。自起参数集中在 `chassis_recovery.h`：`SPIN_SWEEP_DIR` 为 `LEG_MOTION_NEGATIVE`，`SPIN_TARGET_PHI0_RAD`=2.8 rad；两腿收完后同拍启动 1 秒最短方向转动，`SPIN_ALIGN_TARGET_PHI0_RAD`=1.7 rad。两段转动均要求斜坡结束且当前连续角误差小于 0.05 rad；保留原提前收腿窗口。
+- 两腿收腿阶段分别锁存，进入时只捕获一次实际 phi0，参考用 1 s 收至 0.139 m；先收完的腿 WAIT_ALIGN 保持，第二段启动时各自捕获实际反馈并锁存方向。左腿失败即停止推进右腿；右腿失败时两腿输出一并清零。两腿第二段均完成当拍仅进入交接，下一拍开始检查条件；交接先检查就绪，再检查超时，检查包括原正常 phi0 范围。
 - `ZERO_FORCE` 分支保留 break；清零同时覆盖腿虚拟输出、映射关节力矩和轮输出。零力及禁用状态跳过 VMC 映射；交回 NORMAL 的最后一帧仍检查自起映射结果。
 
 ## 3. 其他陷阱

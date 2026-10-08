@@ -80,6 +80,7 @@
 "ctrlboard-h7_imu\bsp_usb.o"
 "ctrlboard-h7_imu\controller.o"
 "ctrlboard-h7_imu\leg_motion.o"
+"ctrlboard-h7_imu\chassis_recovery.o"
 "ctrlboard-h7_imu\usb_device.o"
 "ctrlboard-h7_imu\usbd_desc.o"
 "ctrlboard-h7_imu\usbd_cdc_if.o"

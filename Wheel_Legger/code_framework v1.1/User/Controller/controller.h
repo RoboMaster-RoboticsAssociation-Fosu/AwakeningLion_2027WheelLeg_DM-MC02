@@ -12,7 +12,7 @@
   ******************************************************************************
   */
 #ifndef _CONTROLLER_H
-#define _CONTROLLER_H
+#define _CONTROLLER_H /* 头文件保护，防止通用控制器接口被重复包含 */
 
 
 #include "main.h"
@@ -25,25 +25,25 @@
 #include <math.h>
 
 #ifndef abs
-#define abs(x) ((x > 0) ? x : -x)
+#define abs(x) ((x > 0) ? x : -x) /* 求输入的绝对值 */
 #endif
 
 #ifndef user_malloc
 #ifdef _CMSIS_OS_H
-#define user_malloc pvPortMalloc
+#define user_malloc pvPortMalloc /* 已包含 CMSIS-OS 时，使用 FreeRTOS 堆内存分配函数 */
 #else
-#define user_malloc malloc
+#define user_malloc malloc /* 未包含 CMSIS-OS 时，使用 C 标准库内存分配函数 */
 #endif
 #endif
 
 /******************************** FUZZY PID **********************************/
-#define NB -3
-#define NM -2
-#define NS -1
-#define ZE 0
-#define PS 1
-#define PM 2
-#define PB 3
+#define NB -3 /* 模糊规则的负大等级（Negative Big） */
+#define NM -2 /* 模糊规则的负中等级（Negative Medium） */
+#define NS -1 /* 模糊规则的负小等级（Negative Small） */
+#define ZE 0 /* 模糊规则的零等级（Zero） */
+#define PS 1 /* 模糊规则的正小等级（Positive Small） */
+#define PM 2 /* 模糊规则的正中等级（Positive Medium） */
+#define PB 3 /* 模糊规则的正大等级（Positive Big） */
 
 typedef __packed struct
 {

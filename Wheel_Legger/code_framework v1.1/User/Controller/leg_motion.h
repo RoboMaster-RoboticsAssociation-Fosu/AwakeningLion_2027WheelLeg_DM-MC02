@@ -1,35 +1,29 @@
 #ifndef LEG_MOTION_H
-#define LEG_MOTION_H
+#define LEG_MOTION_H /* 头文件保护，防止单腿动作接口被重复包含 */
 
 #include <stdint.h>
 
-#define LEG_MOTION_PI 3.14159265358979323846f
-#define LEG_MOTION_DEG_TO_RAD (LEG_MOTION_PI / 180.0f)
-#define LEG_MOTION_RAD_TO_DEG (180.0f / LEG_MOTION_PI)
+#define LEG_MOTION_PI 3.14159265358979323846f /* 圆周率 pi，半圈对应的弧度值 */
+#define LEG_MOTION_DEG_TO_RAD (LEG_MOTION_PI / 180.0f) /* 角度转弧度的换算系数 */
+#define LEG_MOTION_RAD_TO_DEG (180.0f / LEG_MOTION_PI) /* 弧度转角度的换算系数 */
 
 /* Rate-form PD gains; F0 is a force in N, Tp is a torque in N*m. */
-#define LEG_MOTION_ANGLE_KP 15.0f
-#define LEG_MOTION_ANGLE_KD 2.0f
-#define LEG_MOTION_LENGTH_KP 300.0f
-#define LEG_MOTION_LENGTH_KD 9.0f
-#define LEG_MOTION_TORQUE_MAX 12.0f
-#define LEG_MOTION_FORCE_MAX 20.0f
-#define LEG_MOTION_LEG_WEIGHT_N 14.33f
-#define LEG_MOTION_LOWER_LEG_WEIGHT_N 10.71f
-#define LEG_MOTION_ANGLE_TOLERANCE_RAD 0.25f
-#define LEG_MOTION_LENGTH_TOLERANCE_M 0.02f
+#define LEG_MOTION_ANGLE_KP 50.0f /* 摆腿角度比例增益，用角度误差计算虚拟摆腿力矩 */
+#define LEG_MOTION_ANGLE_KD 2.0f /* 摆腿角速度阻尼增益，用反馈角速度抑制摆动 */
+#define LEG_MOTION_LENGTH_KP 1000.0f /* 腿长比例增益，用长度误差计算虚拟伸缩力 */
+#define LEG_MOTION_LENGTH_KD 100.0f /* 腿长变化率阻尼增益，用反馈伸缩速度抑制振荡 */
+#define LEG_MOTION_TORQUE_MAX 12.0f /* 虚拟摆腿力矩 Tp 的正负限幅绝对值（N·m） */
+#define LEG_MOTION_FORCE_MAX 40.0f /* 虚拟伸缩力 F0 的正负限幅绝对值（N） */
+#define LEG_MOTION_LEG_WEIGHT_N 14.33f /* 整条腿的重力估计（N），用于摆腿重力补偿 */
+#define LEG_MOTION_LOWER_LEG_WEIGHT_N 10.71f /* 小腿的重力估计（N），用于伸缩方向重力补偿 */
+#define LEG_MOTION_ANGLE_TOLERANCE_RAD 0.25f /* 单腿动作完成时允许的连续角度误差（rad） */
+#define LEG_MOTION_LENGTH_TOLERANCE_M 0.02f /* 单腿动作完成时允许的腿长误差（m） */
 
 typedef enum
 {
     LEG_MOTION_NEGATIVE = -1, /* Decreasing phi0 on either mirrored leg. */
     LEG_MOTION_POSITIVE = 1
 } LegMotion_Direction;
-
-typedef enum
-{
-    LEG_MOTION_ABSOLUTE = 0, /* Body-relative pose, vertical leg = 0 deg. */
-    LEG_MOTION_RELATIVE     /* Nonnegative travel; 360 means a full turn. */
-} LegMotion_AngleMode;
 
 typedef enum
 {
@@ -43,8 +37,7 @@ typedef enum
 typedef struct
 {
     LegMotion_Direction direction;
-    LegMotion_AngleMode angle_mode;
-    float angle_deg;
+    float target_phi0_rad; /* Absolute VMC pose in radians; vertical = pi/2. */
     uint32_t duration_ms;
     float length_m;
     uint32_t timeout_ms; /* Total deadline, measured from this command's start. */
@@ -85,7 +78,8 @@ typedef struct
  * start != 0 restarts from actual feedback and latches command. Otherwise the
  * command argument is ignored and may be NULL. The clock is in milliseconds.
  * duration_ms == 0 sets the reference immediately; timeout_ms must be positive.
- * Absolute targets follow direction; an identical pose commands no extra turn.
+ * Targets are phi0 poses modulo 2*pi and follow the selected direction.
+ * An identical pose commands no extra turn, including targets shifted by 2*pi.
  * DONE is latched and continues holding the fixed target. TIMEOUT/INVALID are
  * latched with zero output until restart. No HAL, CAN, delays or allocation. */
 LegMotion_Result LegMotion_Run(LegMotion_Context *context,

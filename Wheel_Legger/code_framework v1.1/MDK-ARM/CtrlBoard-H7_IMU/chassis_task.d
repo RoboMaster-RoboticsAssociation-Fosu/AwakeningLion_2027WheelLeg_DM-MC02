@@ -77,4 +77,5 @@ ctrlboard-h7_imu/chassis_task.o: ..\User\APP\chassis_task.c \
   ..\User\Lib\user_lib.h ..\Core\Inc\usart.h ..\Core\Inc\main.h \
   ..\Core\Inc\fdcan.h ..\User\APP\INS_task.h ..\User\Algorithm\LQR\LQR.h \
   ..\User\Algorithm\some_config\some_para.h \
-  ..\User\Algorithm\LESO\LESO.h ..\User\Controller\leg_motion.h
+  ..\User\Algorithm\LESO\LESO.h ..\User\Controller\chassis_recovery.h \
+  ..\User\Controller\leg_motion.h

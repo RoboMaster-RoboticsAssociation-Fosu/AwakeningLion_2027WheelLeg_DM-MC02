@@ -1,4 +1,4 @@
-// Compile the real C99 motion module and the current chassis recovery functions.
+// Compile both real C99 controllers and the current chassis integration functions.
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
@@ -27,6 +27,7 @@ function compileAndRun(name, harness) {
         "-finput-charset=UTF-8",
         "-I", path.join(root, "User", "Controller"), "-I", temp,
         path.join(root, "User", "Controller", "leg_motion.c"),
+        path.join(root, "User", "Controller", "chassis_recovery.c"),
         path.join(__dirname, harness),
         "-lm", "-o", executable,
     ]);
@@ -57,8 +58,7 @@ function recoverySource() {
     const recoveryBegin = source.indexOf("static void chassis_zero_outputs(void)\r\n{");
     if (recoveryBegin < 0) throw new Error("Missing recovery output helpers");
     return [
-        between("#define SPIN_SWEEP_DIR", "void chassis_feedback_update"),
-        between("typedef enum\r\n{\r\n    RECOVERY_SWING", "extern INS_t INS;"),
+        between("ChassisRecovery_Context chassis_recovery;", "extern INS_t INS;"),
         definition("VMC_translate"),
         definition("falling_down_detect"),
         source.slice(recoveryBegin),
@@ -67,6 +67,7 @@ function recoverySource() {
 
 try {
     compileAndRun("motion", "leg_motion_verify.c");
+    compileAndRun("recovery_module", "chassis_recovery_verify.c");
     const excerpt = path.join(temp, "chassis_recovery_under_test.inc");
     ownedFiles.push(excerpt);
     fs.writeFileSync(excerpt, recoverySource(), "utf8");

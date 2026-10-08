@@ -1984,6 +1984,11 @@
               <FileType>1</FileType>
               <FilePath>..\User\Controller\leg_motion.c</FilePath>
             </File>
+            <File>
+              <FileName>chassis_recovery.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\User\Controller\chassis_recovery.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

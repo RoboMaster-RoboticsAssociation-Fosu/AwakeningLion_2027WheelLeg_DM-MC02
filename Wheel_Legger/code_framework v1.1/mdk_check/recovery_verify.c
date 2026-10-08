@@ -1,6 +1,6 @@
 /* Host harness around the actual recovery functions extracted by the runner.
  * Only hardware dependencies and the storage layout are substituted. */
-#include "leg_motion.h"
+#include "chassis_recovery.h"
 
 #include <math.h>
 #include <stddef.h>
@@ -32,6 +32,7 @@ static struct
 typedef int Chassis_Enable_e;
 static uint32_t clock_ms;
 static unsigned int checks;
+#define TARGET_STANCE_DEG ((SPIN_TARGET_PHI0_RAD - LEG_MOTION_PI * 0.5f) * LEG_MOTION_RAD_TO_DEG)
 static unsigned int mapping_calls;
 static int bad_mapping;
 
@@ -75,7 +76,7 @@ static void Reset(void)
 {
     unsigned int joint;
     memset(&Chassis, 0, sizeof(Chassis));
-    memset(chassis_leg_motion, 0, sizeof(chassis_leg_motion));
+    memset(&chassis_recovery, 0, sizeof(chassis_recovery));
     chassis_recovery_reset();
     clock_ms = 0U;
     mapping_calls = 0U;
@@ -104,48 +105,76 @@ static void CheckZero(void)
     }
 }
 
+static void SetPhi(unsigned int leg, float phi0, float length)
+{
+    SetLeg(leg, (phi0 - LEG_MOTION_PI * 0.5f) * LEG_MOTION_RAD_TO_DEG, length);
+}
+
+static void PrepareHandoff(void)
+{
+    Reset();
+    SetPhi(LEFT_Leg, 1.2f, SPIN_RETRACT_LENGTH);
+    SetPhi(RIGHT_Leg, 1.2f, SPIN_RETRACT_LENGTH);
+    falling_down();
+    clock_ms = SPIN_RETRACT_TIME_MS;
+    falling_down();
+    CHECK(chassis_recovery.phase[LEFT_Leg] == CHASSIS_RECOVERY_WAIT_ALIGN);
+    CHECK(chassis_recovery.phase[RIGHT_Leg] == CHASSIS_RECOVERY_WAIT_ALIGN);
+    CHECK(Chassis.chassis_mode == FALLING_DOWN);
+    ++clock_ms;
+    falling_down();
+    CHECK(chassis_recovery.phase[LEFT_Leg] == CHASSIS_RECOVERY_ALIGN);
+    CHECK(chassis_recovery.motion[LEFT_Leg].start_tick == chassis_recovery.motion[RIGHT_Leg].start_tick);
+    clock_ms += SPIN_ALIGN_TIME_MS;
+    SetPhi(LEFT_Leg, SPIN_ALIGN_TARGET_PHI0_RAD, SPIN_RETRACT_LENGTH);
+    SetPhi(RIGHT_Leg, SPIN_ALIGN_TARGET_PHI0_RAD, SPIN_RETRACT_LENGTH);
+    falling_down();
+    CHECK(Chassis.chassis_mode == FALLING_TO_NORMAL);
+}
+
 static void IndependentPhases(void)
 {
     float held_angle;
     Reset();
-    SetLeg(LEFT_Leg, SPIN_TARGET_ANGLE_DEG, 0.30f);
-    SetLeg(RIGHT_Leg, -120.0f, 0.13f);
+    SetPhi(LEFT_Leg, 1.2f, SPIN_SCAN_LENGTH);
+    SetPhi(RIGHT_Leg, -0.57f, SPIN_SCAN_LENGTH);
     falling_down();
-    held_angle = chassis_leg_motion[LEFT_Leg].target_angle_rad;
-    CHECK(recovery_phase[LEFT_Leg] == RECOVERY_RETRACT);
-    CHECK(recovery_phase[RIGHT_Leg] == RECOVERY_SWING);
-    clock_ms = 500U;
-    SetLeg(LEFT_Leg, SPIN_TARGET_ANGLE_DEG, 0.215f);
+    held_angle = chassis_recovery.motion[LEFT_Leg].target_angle_rad;
+    CHECK(chassis_recovery.phase[LEFT_Leg] == CHASSIS_RECOVERY_RETRACT);
+    CHECK(chassis_recovery.phase[RIGHT_Leg] == CHASSIS_RECOVERY_SWING);
+    clock_ms = SPIN_RETRACT_TIME_MS;
+    SetPhi(LEFT_Leg, 1.2f, SPIN_RETRACT_LENGTH);
     falling_down();
-    NEAR(chassis_leg_motion[LEFT_Leg].reference_length_m, 0.215f);
-    clock_ms = 1000U;
-    SetLeg(LEFT_Leg, SPIN_TARGET_ANGLE_DEG, 0.13f);
-    falling_down();
-    CHECK(recovery_phase[LEFT_Leg] == RECOVERY_HOLD);
+    CHECK(chassis_recovery.phase[LEFT_Leg] == CHASSIS_RECOVERY_WAIT_ALIGN);
     CHECK(Chassis.chassis_mode == FALLING_DOWN);
-
-    clock_ms = 1250U;
-    SetLeg(LEFT_Leg, SPIN_TARGET_ANGLE_DEG + 30.0f, 0.14f);
-    SetLeg(RIGHT_Leg, SPIN_TARGET_ANGLE_DEG, 0.30f);
+    clock_ms = SPIN_RAMP_TIME_MS;
+    SetPhi(LEFT_Leg, 1.4f, SPIN_RETRACT_LENGTH);
+    SetPhi(RIGHT_Leg, SPIN_TARGET_PHI0_RAD, SPIN_SCAN_LENGTH);
     falling_down();
-    CHECK(recovery_phase[LEFT_Leg] == RECOVERY_HOLD);
-    CHECK(recovery_phase[RIGHT_Leg] == RECOVERY_RETRACT);
-    NEAR(chassis_leg_motion[LEFT_Leg].reference_length_m, 0.13f);
-    NEAR(chassis_leg_motion[LEFT_Leg].target_angle_rad, held_angle);
+    CHECK(chassis_recovery.phase[LEFT_Leg] == CHASSIS_RECOVERY_WAIT_ALIGN);
+    CHECK(chassis_recovery.phase[RIGHT_Leg] == CHASSIS_RECOVERY_RETRACT);
+    NEAR(chassis_recovery.motion[LEFT_Leg].target_angle_rad, held_angle);
+    NEAR(chassis_recovery.motion[LEFT_Leg].reference_length_m, SPIN_RETRACT_LENGTH);
     CHECK(Chassis.leg_situation[LEFT_Leg].vmc.Tp < -5.0f);
-    CHECK(chassis_leg_motion[RIGHT_Leg].start_tick == 1250U);
-    CHECK(chassis_leg_motion[LEFT_Leg].start_tick == 0U);
-
-    clock_ms = 1750U;
-    SetLeg(LEFT_Leg, SPIN_TARGET_ANGLE_DEG, 0.13f);
-    SetLeg(RIGHT_Leg, SPIN_TARGET_ANGLE_DEG, 0.215f);
+    clock_ms += SPIN_RETRACT_TIME_MS;
+    SetPhi(RIGHT_Leg, SPIN_TARGET_PHI0_RAD, SPIN_RETRACT_LENGTH);
     falling_down();
+    CHECK(chassis_recovery.phase[RIGHT_Leg] == CHASSIS_RECOVERY_WAIT_ALIGN);
     CHECK(Chassis.chassis_mode == FALLING_DOWN);
-    clock_ms = 2250U;
-    SetLeg(RIGHT_Leg, SPIN_TARGET_ANGLE_DEG, 0.13f);
+    ++clock_ms;
+    falling_down();
+    CHECK(chassis_recovery.phase[LEFT_Leg] == CHASSIS_RECOVERY_ALIGN);
+    CHECK(chassis_recovery.phase[RIGHT_Leg] == CHASSIS_RECOVERY_ALIGN);
+    CHECK(chassis_recovery.motion[LEFT_Leg].start_tick == clock_ms);
+    CHECK(chassis_recovery.motion[RIGHT_Leg].start_tick == clock_ms);
+    CHECK(chassis_recovery.motion[LEFT_Leg].command.direction == LEG_MOTION_POSITIVE);
+    CHECK(chassis_recovery.motion[RIGHT_Leg].command.direction == LEG_MOTION_NEGATIVE);
+    clock_ms += SPIN_ALIGN_TIME_MS;
+    SetPhi(LEFT_Leg, SPIN_ALIGN_TARGET_PHI0_RAD, SPIN_RETRACT_LENGTH);
+    SetPhi(RIGHT_Leg, SPIN_ALIGN_TARGET_PHI0_RAD, SPIN_RETRACT_LENGTH);
     falling_down();
     CHECK(Chassis.chassis_mode == FALLING_TO_NORMAL);
-    clock_ms = 2251U;
+    ++clock_ms;
     falling_to_down();
     CHECK(Chassis.chassis_mode == NORMAL);
 }
@@ -153,15 +182,23 @@ static void IndependentPhases(void)
 static void VerticalAndEquivalentTurns(void)
 {
     Reset();
-    SetLeg(LEFT_Leg, 0.0f, 0.13f);
-    SetLeg(RIGHT_Leg, -360.0f, 0.13f);
+    SetLeg(LEFT_Leg, 0.0f, SPIN_RETRACT_LENGTH);
+    SetLeg(RIGHT_Leg, -360.0f, SPIN_RETRACT_LENGTH);
     falling_down();
-    CHECK(recovery_phase[LEFT_Leg] == RECOVERY_RETRACT);
-    CHECK(recovery_phase[RIGHT_Leg] == RECOVERY_RETRACT);
+    CHECK(chassis_recovery.phase[LEFT_Leg] == CHASSIS_RECOVERY_RETRACT);
+    CHECK(chassis_recovery.phase[RIGHT_Leg] == CHASSIS_RECOVERY_RETRACT);
+    clock_ms = SPIN_RETRACT_TIME_MS;
+    falling_down();
     CHECK(Chassis.chassis_mode == FALLING_DOWN);
-    clock_ms = 1000U;
+    ++clock_ms;
+    falling_down();
+    CHECK(chassis_recovery.motion[LEFT_Leg].command.direction == LEG_MOTION_POSITIVE);
+    clock_ms += SPIN_ALIGN_TIME_MS;
+    SetPhi(LEFT_Leg, SPIN_ALIGN_TARGET_PHI0_RAD, SPIN_RETRACT_LENGTH);
+    SetPhi(RIGHT_Leg, SPIN_ALIGN_TARGET_PHI0_RAD, SPIN_RETRACT_LENGTH);
     falling_down();
     CHECK(Chassis.chassis_mode == FALLING_TO_NORMAL);
+    ++clock_ms;
     falling_to_down();
     CHECK(Chassis.chassis_mode == NORMAL);
 }
@@ -217,32 +254,27 @@ static void FailureOrdering(void)
         Chassis.leg_situation[failed_leg].vmc.d_phi0 = NAN;
         falling_down();
         CHECK(Chassis.chassis_mode == ZERO_FORCE);
-        CHECK(chassis_leg_motion[failed_leg].result == LEG_MOTION_INVALID);
+        CHECK(chassis_recovery.motion[failed_leg].result == LEG_MOTION_INVALID);
         if (failed_leg == LEFT_Leg)
         {
-            CHECK(chassis_leg_motion[RIGHT_Leg].result == LEG_MOTION_IDLE);
+            CHECK(chassis_recovery.motion[RIGHT_Leg].result == LEG_MOTION_IDLE);
         }
         else
         {
-            CHECK(chassis_leg_motion[LEFT_Leg].result == LEG_MOTION_RUNNING);
+            CHECK(chassis_recovery.motion[LEFT_Leg].result == LEG_MOTION_RUNNING);
         }
         CheckZero();
 
-        Reset();
-        SetLeg(LEFT_Leg, 0.0f, 0.13f);
-        SetLeg(RIGHT_Leg, 0.0f, 0.13f);
-        falling_down();
-        clock_ms = 1000U;
-        falling_down();
-        CHECK(Chassis.chassis_mode == FALLING_TO_NORMAL);
-        SetLeg(RIGHT_Leg, 5.0f, 0.13f);
+        PrepareHandoff();
+        SetPhi(RIGHT_Leg, SPIN_ALIGN_TARGET_PHI0_RAD + 0.1f, SPIN_RETRACT_LENGTH);
+        ++clock_ms;
         Chassis.leg_situation[failed_leg].vmc.d_phi0 = NAN;
         falling_to_down();
         CHECK(Chassis.chassis_mode == ZERO_FORCE);
-        CHECK(chassis_leg_motion[failed_leg].result == LEG_MOTION_INVALID);
+        CHECK(chassis_recovery.motion[failed_leg].result == LEG_MOTION_INVALID);
         if (failed_leg == LEFT_Leg)
         {
-            NEAR(chassis_leg_motion[RIGHT_Leg].actual_angle_rad, 0.0f);
+            NEAR(chassis_recovery.motion[RIGHT_Leg].actual_angle_rad, SPIN_ALIGN_TARGET_PHI0_RAD - LEG_MOTION_PI * 0.5f);
         }
         CheckZero();
     }
@@ -255,10 +287,10 @@ static void SharedDeadline(void)
     SetLeg(RIGHT_Leg, -120.0f, 0.20f);
     falling_down();
     clock_ms = SPIN_SCAN_TIMEOUT_MS - 500U;
-    SetLeg(LEFT_Leg, SPIN_TARGET_ANGLE_DEG, 0.30f);
+    SetLeg(LEFT_Leg, TARGET_STANCE_DEG, 0.30f);
     falling_down();
-    CHECK(recovery_phase[LEFT_Leg] == RECOVERY_RETRACT);
-    CHECK(chassis_leg_motion[LEFT_Leg].command.timeout_ms == 500U);
+    CHECK(chassis_recovery.phase[LEFT_Leg] == CHASSIS_RECOVERY_RETRACT);
+    CHECK(chassis_recovery.motion[LEFT_Leg].command.timeout_ms == 500U);
     clock_ms = SPIN_SCAN_TIMEOUT_MS;
     falling_down();
     CHECK(Chassis.chassis_mode == ZERO_FORCE);
@@ -270,20 +302,21 @@ static void HandoffGuards(void)
     unsigned int scenario;
     for (scenario = 0U; scenario < 2U; ++scenario)
     {
-        float angle = scenario == 0U ? SPIN_TARGET_ANGLE_DEG :
-                      (2.503f - LEG_MOTION_PI * 0.5f) * LEG_MOTION_RAD_TO_DEG;
-        Reset();
-        SetLeg(LEFT_Leg, angle, 0.13f);
-        SetLeg(RIGHT_Leg, angle, 0.13f);
-        falling_down();
-        clock_ms = 1000U;
-        falling_down();
-        CHECK(Chassis.chassis_mode == FALLING_TO_NORMAL);
-        if (scenario == 0U) Chassis.body_state.theta = 0.25f;
-        clock_ms = 1001U;
+        uint32_t handoff_tick;
+        PrepareHandoff();
+        handoff_tick = clock_ms;
+        if (scenario == 0U)
+        {
+            Chassis.body_state.theta = 0.25f;
+        }
+        else
+        {
+            SetPhi(LEFT_Leg, SPIN_ALIGN_TARGET_PHI0_RAD + 0.1f, SPIN_RETRACT_LENGTH);
+        }
+        ++clock_ms;
         falling_to_down();
         CHECK(Chassis.chassis_mode == FALLING_TO_NORMAL);
-        clock_ms = 1000U + SPIN_HANDOFF_TIMEOUT_MS;
+        clock_ms = handoff_tick + SPIN_HANDOFF_TIMEOUT_MS;
         falling_to_down();
         CHECK(Chassis.chassis_mode == ZERO_FORCE);
         CheckZero();
@@ -292,18 +325,15 @@ static void HandoffGuards(void)
 
 static void HandoffOutputValidation(void)
 {
-    Reset();
-    SetLeg(LEFT_Leg, 0.0f, 0.13f);
-    SetLeg(RIGHT_Leg, 0.0f, 0.13f);
-    falling_down();
-    clock_ms = 1000U;
-    falling_down();
+    PrepareHandoff();
+    ++clock_ms;
     falling_to_down();
     CHECK(Chassis.chassis_mode == NORMAL);
     /* The mode has changed, but this cycle still sends recovery commands. */
     bad_mapping = 1;
     VMC_translate();
     CHECK(Chassis.chassis_mode == ZERO_FORCE);
+    CHECK(mapping_calls == 2U);
     CheckZero();
 }
 
@@ -325,7 +355,7 @@ static void EnableEdges(void)
     falling_down_detect();
     CHECK(Chassis.chassis_mode == FALLING_DOWN);
     falling_down();
-    CHECK(chassis_leg_motion[LEFT_Leg].result == LEG_MOTION_RUNNING);
+    CHECK(chassis_recovery.motion[LEFT_Leg].result == LEG_MOTION_RUNNING);
 }
 
 int main(void)

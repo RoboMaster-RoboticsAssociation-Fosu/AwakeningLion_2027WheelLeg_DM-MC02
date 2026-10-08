@@ -16,8 +16,8 @@ r"""
       -> J_A = -M^-1·G, J_B = -M^-1·B_raw (等价 MATLAB solve+jacobian,
          --verify-symbolic 可用原版做法交叉验证)
       -> 填装 A(10x10), B(10x4)
-   2) 连续 LQR: P 解代数 Riccati 方程, K = R^-1·B?P (等价 MATLAB icare)
-      注: ABK_LQR.py 是 ZOH 离散 + dlqr 版; 同参数同 Q/R 下两者 K 差约 1%。
+   2) 离散 LQR: 按 Ts 做 ZOH 离散化, P 解离散 Riccati 方程,
+      K = solve(R + Bd.T@P@Bd, Bd.T@P@Ad) (同 ABK_LQR.py 的 c2d + dlqr)。
    3) 变腿长扫频 -> 逐元素 poly22 最小二乘拟合:
          p(l_l, l_r) = p00 + p10·l_l + p01·l_r + p20·l_l? + p11·l_l·l_r + p02·l_r?
       输出 40x6 系数表: 第 r 行 = K 展平后第 r 个元素(行主序),
@@ -40,7 +40,7 @@ r"""
    python hku_lqr_k_calc.py --no-formula-inertia     # 惯性用声明值(而非公式)
    python hku_lqr_k_calc.py --verify-symbolic        # 符号法交叉验证 J_A/J_B
    python hku_lqr_k_calc.py --params R_w=0.06,m_b=12 # 覆盖物理参数
-   (生成哪些数据由文件顶部的 USE_K / USE_L / USE_AD_BD 开关决定, 默认全开)
+   (生成哪些数据由文件顶部的 USE_K / USE_L / USE_AD_BD 开关决定)
 
  输出(当前目录, --out-dir 可改, --no-out 关闭), 均为可直接粘贴的 C 数组定义:
    K_fixed.txt              float K[4][10]        定腿长 LQR 增益
@@ -79,9 +79,9 @@ if hasattr(sys.stdout, "reconfigure"):
 # ★★★ 用户开关（常用项都放这里, 改完直接运行）★★★
 # =============================================================================
 # ---- 输出内容: 1 = 生成该组数据, 0 = 跳过(连计算也跳过, 拟合提速) ----
-USE_K = 1      # LQR 增益 K:   K_fixed.txt + K_Fit_Coefficients.txt
+USE_K = 0      # LQR 增益 K:   K_fixed.txt + K_Fit_Coefficients.txt
 USE_L = 0      # LESO 增益 L:  L_fixed.txt + L_Fit_Coefficients.txt
-USE_AD_BD = 0  # ZOH 离散模型: Ad/Bd_fixed.txt + Ad/Bd_Fit_Coefficients.txt (拼 A_e/B_e 用)
+USE_AD_BD = 1  # ZOH 离散模型: Ad/Bd_fixed.txt + Ad/Bd_Fit_Coefficients.txt (拼 A_e/B_e 用)
 # ---- 机械数据来源: 机械给不出 CAD/实测数据时用公式临时估算, 到位后改 0 换实测 ----
 USE_FORMULA_INERTIA = 1   # 1: I_w/I_b/I_z 公式估算(覆盖声明值); 0: 用 PARAMS 声明值
 USE_LEG_FORMULA = 1       # 1: 腿部 lw/lb/Il 用经验公式; 0: 用 LEG_DATA 实测表插值
@@ -252,21 +252,23 @@ def fill_AB(J_A, J_B, R_w_, R_l_, l_l_, l_r_):
 
 
 def solve_lqr(A, B, Q, R):
-    """连续时间 LQR: P 解 A?P + PA - P·B·R??·B?·P + Q = 0, K = R??·B?·P。
-    返回 K, ARE 最大残差(应≈0), 闭环特征值最大实部(应<0)。"""
-    P = scipy_linalg.solve_continuous_are(A, B, Q, R)
-    K = np.linalg.solve(R, B.T @ P)
-    are_resid = float(np.max(np.abs(A.T @ P + P @ A - P @ B @ np.linalg.solve(R, B.T @ P) + Q)))
-    eig_max = float(np.max(np.real(np.linalg.eigvals(A - B @ K))))
-    return K, are_resid, eig_max
+    """连续 A/B 按 Ts 做 ZOH, 再求离散 LQR。
+    返回 K, DARE 最大绝对残差(应接近0), 闭环谱半径(应<1)。"""
+    Ad, Bd = c2d(A, B, Ts)
+    P = scipy_linalg.solve_discrete_are(Ad, Bd, Q, R)
+    K = np.linalg.solve(R + Bd.T @ P @ Bd, Bd.T @ P @ Ad)
+    dare_resid = float(np.max(np.abs(Ad.T @ P @ Ad - P - Ad.T @ P @ Bd @ K + Q)))
+    spectral_radius = float(np.max(np.abs(np.linalg.eigvals(Ad - Bd @ K))))
+    return K, dare_resid, spectral_radius
 
 
 def compute_K(params, M_fun, G_fun, Br_fun, Q, R):
-    """完整链路: 物理参数 -> J_A/J_B -> A,B -> 连续 LQR 的 K。"""
+    """物理参数 -> 连续 A/B -> ZOH -> 离散 LQR 的 K。
+    返回原始连续 A/B, 供 LESO 分支按同一 Ts 离散化一次。"""
     J_A, J_B = jacobians_numeric(params, M_fun, G_fun, Br_fun)
     A, B = fill_AB(J_A, J_B, params['R_w'], params['R_l'], params['l_l'], params['l_r'])
-    K, are_resid, eig_max = solve_lqr(A, B, Q, R)
-    return K, A, B, are_resid, eig_max
+    K, dare_resid, spectral_radius = solve_lqr(A, B, Q, R)
+    return K, A, B, dare_resid, spectral_radius
 
 
 # =============================================================================
@@ -315,7 +317,7 @@ LEG_DATA = np.array([
     [0.24317, 0.09280, 0.14783, 0.01320485307],
 ])
 
-# ---- LQR 权重 (来自 ABK_LQR.py, 按 1kHz 离散设计调的, 用在连续 LQR 是合理起点) ----
+# ---- LQR 权重 (当前本车配置, 用于 Ts 对应的离散设计) ----
 # Q 对角线依次对应 10 个状态, 物理含义(括号内为固件侧常用的对应量名):
 #   s          机器人沿前进方向的水平位移 (m)      —— 由两轮转角平均折算 (foot_distance)
 #   ds         前进速度, 即 s 的导数 (m/s)                        (foot_speed)
@@ -337,8 +339,8 @@ Q_LQR = np.diag([     100.0,       20.0,      100.0,       20.0,      400.0,    
 #                   T_wl    T_wr    T_bl    T_br
 R_LQR = np.diag([ 20.0,  20.0,   4.0,   4.0])
 
-# ---- LESO 扩张状态观测器参数 (同 ABK_LQR.py) ----
-Ts = 0.001               # 控制周期 (s), 固件 1 kHz; L 在该周期的 ZOH 离散模型上设计
+# ---- LQR / LESO 共用采样周期及观测器参数 ----
+Ts = 0.001               # 控制周期 (s); K 和 L 均基于该周期的 ZOH 离散模型
 LESO_STATE_POLE = 0.4    # 10 个原状态极点 (z 域模), 带宽 -ln(0.4)/Ts ≈ 146 Hz
 LESO_DIST_POLE = 0.985   # 4 个扩张扰动极点, 带宽 ≈ 2.4 Hz (扰动通道要慢, 太快会放大量测噪声)
 
@@ -455,9 +457,9 @@ def fit_all_coefficients(params, M_fun, G_fun, Br_fun, Q, R, grid,
             J_A, J_B = jacobians_numeric(p, M_fun, G_fun, Br_fun)
             A, B = fill_AB(J_A, J_B, p['R_w'], p['R_l'], p['l_l'], p['l_r'])
             if 'K' in want:
-                K, _, eig_max = solve_lqr(A, B, Q, R)
-                if eig_max >= 0.0:
-                    unstable.append((row_l[0], row_r[0], eig_max))
+                K, _, spectral_radius = solve_lqr(A, B, Q, R)
+                if spectral_radius >= 1.0:
+                    unstable.append((row_l[0], row_r[0], spectral_radius))
                 K_samples[idx, 2, :] = K.reshape(40)
             if 'L' in want or 'Ad' in want or 'Bd' in want:
                 Ad, Bd = c2d(A, B, Ts)
@@ -470,9 +472,9 @@ def fit_all_coefficients(params, M_fun, G_fun, Br_fun, Q, R, grid,
                     Bd_samples[idx, 2, :] = Bd.reshape(40)
 
     if unstable:
-        print(f'  [警告] 有 {len(unstable)} 组腿长闭环不稳定(特征值实部>=0):')
-        for ll, lr, em in unstable[:5]:
-            print(f'         l_l={ll:.2f}, l_r={lr:.2f}, max Re(eig)={em:.3e}')
+        print(f'  [警告] 有 {len(unstable)} 组腿长离散闭环不稳定(谱半径>=1):')
+        for ll, lr, radius in unstable[:5]:
+            print(f'         l_l={ll:.2f}, l_r={lr:.2f}, max |eig(Ad-BdK)|={radius:.9f}')
 
     x = coords[:, 0]
     y = coords[:, 1]
@@ -628,7 +630,7 @@ def main(argv=None):
 
     # ===================== 定腿长 K =====================
     if args.mode in ('all', 'fixed'):
-        print('===== 定腿长 LQR 求解 =====')
+        print(f'===== 定腿长离散 LQR 求解 (Ts={Ts:g} s) =====')
         p = dict(params)
         if args.leg_left is not None:
             p['l_l'] = args.leg_left
@@ -644,10 +646,10 @@ def main(argv=None):
         print('  当前参数: ' + ', '.join(f'{k}={v:.6g}' for k, v in p.items()))
 
         if 'K' in want:
-            K, A, B, are_resid, eig_max = compute_K(p, M_fun, G_fun, Br_fun, Q_LQR, R_LQR)
+            K, A, B, dare_resid, spectral_radius = compute_K(p, M_fun, G_fun, Br_fun, Q_LQR, R_LQR)
             print_labeled_K(K)
-            print(f'  闭环 max Re(eig(A-BK)) = {eig_max:.4f}  (<0 即稳定)')
-            print(f'  Riccati 方程最大残差   = {are_resid:.3e}  (应接近 0)')
+            print(f'  闭环 max |eig(Ad-BdK)| = {spectral_radius:.9f}  (<1 即稳定)')
+            print(f'  离散 Riccati 最大残差 = {dare_resid:.3e}  (应接近 0)')
 
             block = c_array_block('K', 4, 10, K)
             print('  ---- C 数组定义, 可直接粘贴进 C ----')

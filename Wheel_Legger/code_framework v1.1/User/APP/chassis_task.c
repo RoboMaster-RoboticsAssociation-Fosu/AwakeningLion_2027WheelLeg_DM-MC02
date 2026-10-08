@@ -11,7 +11,7 @@
 #include "some_para.h"
 #include "bsp_dwt.h"  
 #include "LESO.h"
-#include "leg_motion.h"
+#include "chassis_recovery.h"
 #include <math.h>
 #include <stddef.h>
 
@@ -19,20 +19,6 @@
 #define Chassis_Time						1		
 
 #define mirror -1.0f
-
-/* 方向按 phi0 增减定义，左右腿使用同一套物理坐标。 */
-#define SPIN_SWEEP_DIR LEG_MOTION_NEGATIVE
-/* 腿垂直向下为 0 度，目标对应原来的 phi0 约 2.254 rad。 */
-#define SPIN_TARGET_ANGLE_DEG 39.143f
-#define SPIN_RAMP_TIME_MS 4000U
-#define SPIN_RETRACT_TIME_MS 1000U
-#define SPIN_EARLY_ANGLE 0.9f
-#define SPIN_ANGLE_WINDOW LEG_MOTION_ANGLE_TOLERANCE_RAD
-#define SPIN_SCAN_LENGTH 0.30f
-#define SPIN_RETRACT_LENGTH 0.13f
-#define SPIN_LENGTH_TOLERANCE LEG_MOTION_LENGTH_TOLERANCE_M
-#define SPIN_SCAN_TIMEOUT_MS 600000U
-#define SPIN_HANDOFF_TIMEOUT_MS 1500U
 
 void chassis_feedback_update(void);
 void LQR(void);
@@ -48,6 +34,7 @@ void zero_force(void);
 static void chassis_zero_outputs(void);
 static void chassis_recovery_reset(void);
 static void chassis_recovery_abort(void);
+static void chassis_recovery_control(void);
 
 
 PidTypedef LegLenth_Left_Pid;
@@ -64,20 +51,9 @@ float fb_dt;
    任务抢占，而不是自己慢。定位完可整段删除。 */
 float t_fb, t_mode, t_leso, t_can, t_sum;
 
-typedef enum
-{
-    RECOVERY_SWING = 0,
-    RECOVERY_RETRACT,
-    RECOVERY_HOLD
-} Recovery_Phase;
-
-/* 左右腿分别保存动作状态，可在调试器中观察。 */
-LegMotion_Context chassis_leg_motion[2];
-static Recovery_Phase recovery_phase[2];
-static uint8_t recovery_started;
+/* 自起阶段和两腿动作统一保存，可在调试器中观察。 */
+ChassisRecovery_Context chassis_recovery;
 static uint8_t recovery_output_pending;
-static uint32_t recovery_entry_tick;
-static uint32_t recovery_handoff_tick;
 
 extern INS_t INS;
 Chassis_Info_Typedef Chassis = {
@@ -503,11 +479,8 @@ static void chassis_zero_outputs(void)
 
 static void chassis_recovery_reset(void)
 {
-    recovery_started = 0U;
     recovery_output_pending = 0U;
-    recovery_phase[LEFT_Leg] = RECOVERY_SWING;
-    recovery_phase[RIGHT_Leg] = RECOVERY_SWING;
-    /* 保留单腿上下文供故障后观察，下次启动时重新初始化。 */
+    ChassisRecovery_Reset(&chassis_recovery);
 }
 
 static void chassis_recovery_abort(void)
@@ -515,123 +488,6 @@ static void chassis_recovery_abort(void)
     Chassis.chassis_mode = ZERO_FORCE;
     chassis_zero_outputs();
     chassis_recovery_reset();
-}
-
-static uint8_t chassis_recovery_at_stance(float phi0)
-{
-    float spin;
-    float error;
-    uint8_t early;
-
-    if (!isfinite(phi0))
-    {
-        return 0U;
-    }
-    spin = remainderf(phi0 - LEG_MOTION_PI * 0.5f,
-                       2.0f * LEG_MOTION_PI);
-    /* 零角度和整圈对应相同姿态。 */
-    if (fabsf(spin) < 0.000001f)
-    {
-        spin = 0.0f;
-    }
-    if (SPIN_SWEEP_DIR == LEG_MOTION_POSITIVE)
-    {
-        early = (spin >= 0.0f && spin <= SPIN_EARLY_ANGLE);
-    }
-    else
-    {
-        early = (spin <= 0.0f && spin >= -SPIN_EARLY_ANGLE);
-    }
-    error = remainderf(SPIN_TARGET_ANGLE_DEG * LEG_MOTION_DEG_TO_RAD - spin,
-                        2.0f * LEG_MOTION_PI);
-    return early || fabsf(error) < SPIN_ANGLE_WINDOW;
-}
-
-/* 单腿按扫腿、收腿、保持推进；反馈和输出在这里直接接入动作模块。 */
-static LegMotion_Result falling_leg_control(uint8_t leg, uint8_t start, uint32_t now)
-{
-    vmc_leg_t *vmc = &Chassis.leg_situation[leg].vmc;
-    LegMotion_Command command;
-    const LegMotion_Command *active_command = &command;
-    LegMotion_Feedback feedback;
-    LegMotion_Output output;
-    LegMotion_Result result;
-
-    /* 实际到位才首次进入收腿，并捕获这一刻的角度和腿长。 */
-    if (recovery_phase[leg] == RECOVERY_SWING &&
-        chassis_recovery_at_stance(vmc->phi0))
-    {
-        recovery_phase[leg] = RECOVERY_RETRACT;
-        start = 1U;
-    }
-
-    command.direction = SPIN_SWEEP_DIR;
-    /* 收腿只使用剩余时间，不延长从自起入口开始的总截止时间。 */
-    command.timeout_ms = SPIN_SCAN_TIMEOUT_MS - (uint32_t)(now - recovery_entry_tick);
-    switch (recovery_phase[leg])
-    {
-        case RECOVERY_SWING:
-        {
-            command.angle_mode = LEG_MOTION_ABSOLUTE;
-            command.angle_deg = SPIN_TARGET_ANGLE_DEG;
-            command.duration_ms = SPIN_RAMP_TIME_MS;
-            command.length_m = SPIN_SCAN_LENGTH;
-        }break;
-        case RECOVERY_RETRACT:
-        {
-            /* 相对转角为零：固定进入收腿时的角度，只改变腿长。 */
-            command.angle_mode = LEG_MOTION_RELATIVE;
-            command.angle_deg = 0.0f;
-            command.duration_ms = SPIN_RETRACT_TIME_MS;
-            command.length_m = SPIN_RETRACT_LENGTH;
-        }break;
-        case RECOVERY_HOLD:
-        {
-            /* 已完成的动作继续保持，不重新启动，也不覆盖锁存目标。 */
-            active_command = NULL;
-            start = 0U;
-        }break;
-    }
-
-    feedback.phi0_rad = vmc->phi0;
-    feedback.angular_velocity_rad_s = vmc->d_phi0;
-    feedback.length_m = vmc->L0;
-    feedback.length_velocity_m_s = vmc->d_L0;
-    result = LegMotion_Run(&chassis_leg_motion[leg], active_command,
-                           &feedback, now, start, &output);
-
-    recovery_output_pending = 1U;
-    vmc->F0 = output.F0;
-    vmc->Tp = output.Tp;
-    if (recovery_phase[leg] == RECOVERY_RETRACT && result == LEG_MOTION_DONE)
-    {
-        recovery_phase[leg] = RECOVERY_HOLD;
-    }
-    return result;
-}
-
-static uint8_t chassis_recovery_handoff_ready(void)
-{
-    uint8_t leg;
-
-    if (!isfinite(Chassis.body_state.theta) ||
-        fabsf(Chassis.body_state.theta) >= 0.2f)
-    {
-        return 0U;
-    }
-    for (leg = 0U; leg < 2U; ++leg)
-    {
-        vmc_leg_t *vmc = &Chassis.leg_situation[leg].vmc;
-
-        if (!chassis_recovery_at_stance(vmc->phi0) ||
-            vmc->phi0 < 0.4f || vmc->phi0 > 2.5f ||
-            fabsf(SPIN_RETRACT_LENGTH - vmc->L0) >= SPIN_LENGTH_TOLERANCE ||
-            fabsf(vmc->d_L0) >= 0.05f)
-        {
-            return 0U;
-        }
-    }
-    return 1U;
 }
 
 void zero_force(void)
@@ -654,99 +510,69 @@ void normal_mode(void)
     LEG_Lenth_Control();
 }
 
-void falling_down(void)
+/* 底盘只负责传入反馈、回写输出和切换模式。 */
+static void chassis_recovery_control(void)
 {
-    uint32_t now = HAL_GetTick();
-    uint32_t elapsed;
-    uint8_t first_cycle = 0U;
-    LegMotion_Result result;
+    ChassisRecovery_Input input;
+    ChassisRecovery_Output output;
+    ChassisRecovery_Result result;
 
-    if (Chassis.chassis_enable == OFFLINE)
+    input.enabled = (Chassis.chassis_enable == ONLINE);
+    input.pitch_rad = Chassis.body_state.theta;
+    input.leg[CHASSIS_RECOVERY_LEFT].phi0_rad = Chassis.leg_situation[LEFT_Leg].vmc.phi0;
+    input.leg[CHASSIS_RECOVERY_LEFT].angular_velocity_rad_s = Chassis.leg_situation[LEFT_Leg].vmc.d_phi0;
+    input.leg[CHASSIS_RECOVERY_LEFT].length_m = Chassis.leg_situation[LEFT_Leg].vmc.L0;
+    input.leg[CHASSIS_RECOVERY_LEFT].length_velocity_m_s = Chassis.leg_situation[LEFT_Leg].vmc.d_L0;
+    input.leg[CHASSIS_RECOVERY_RIGHT].phi0_rad = Chassis.leg_situation[RIGHT_Leg].vmc.phi0;
+    input.leg[CHASSIS_RECOVERY_RIGHT].angular_velocity_rad_s = Chassis.leg_situation[RIGHT_Leg].vmc.d_phi0;
+    input.leg[CHASSIS_RECOVERY_RIGHT].length_m = Chassis.leg_situation[RIGHT_Leg].vmc.L0;
+    input.leg[CHASSIS_RECOVERY_RIGHT].length_velocity_m_s = Chassis.leg_situation[RIGHT_Leg].vmc.d_L0;
+
+    result = ChassisRecovery_Run(&chassis_recovery, &input, HAL_GetTick(), &output);
+    switch (result)
     {
-        chassis_zero_outputs();
-        chassis_recovery_reset();
-        return;
+        case CHASSIS_RECOVERY_IDLE:
+        {
+            chassis_zero_outputs();
+            recovery_output_pending = 0U;
+            return;
+        }
+        case CHASSIS_RECOVERY_RUNNING:
+        {
+            Chassis.chassis_mode = FALLING_DOWN;
+        }break;
+        case CHASSIS_RECOVERY_HANDOFF:
+        {
+            Chassis.chassis_mode = FALLING_TO_NORMAL;
+        }break;
+        case CHASSIS_RECOVERY_DONE:
+        {
+            Chassis.chassis_mode = NORMAL;
+        }break;
+        case CHASSIS_RECOVERY_FAULT:
+        default:
+        {
+            chassis_recovery_abort();
+            return;
+        }
     }
+
+    Chassis.leg_situation[LEFT_Leg].vmc.F0 = output.leg[CHASSIS_RECOVERY_LEFT].F0;
+    Chassis.leg_situation[LEFT_Leg].vmc.Tp = output.leg[CHASSIS_RECOVERY_LEFT].Tp;
+    Chassis.leg_situation[RIGHT_Leg].vmc.F0 = output.leg[CHASSIS_RECOVERY_RIGHT].F0;
+    Chassis.leg_situation[RIGHT_Leg].vmc.Tp = output.leg[CHASSIS_RECOVERY_RIGHT].Tp;
     Chassis.Wheel_Motor[LEFT_Wheel].wheel_T = 0.0f;
     Chassis.Wheel_Motor[RIGHT_Wheel].wheel_T = 0.0f;
+    /* 即使本拍已经切到 NORMAL，VMC 仍需检查这次自起输出。 */
+    recovery_output_pending = 1U;
+}
 
-    /* 首次进入自起，复位两腿阶段并开始总计时。 */
-    if (recovery_started == 0U)
-    {
-        chassis_recovery_reset();
-        recovery_started = 1U;
-        recovery_entry_tick = now;
-        first_cycle = 1U;
-    }
-    elapsed = (uint32_t)(now - recovery_entry_tick);
-    if (elapsed >= SPIN_SCAN_TIMEOUT_MS)
-    {
-        chassis_recovery_abort();
-        return;
-    }
-
-    /* 左腿自起；失败时立即清零，不继续执行右腿。 */
-    result = falling_leg_control(LEFT_Leg, first_cycle, now);
-    if (result == LEG_MOTION_TIMEOUT || result == LEG_MOTION_INVALID)
-    {
-        chassis_recovery_abort();
-        return;
-    }
-
-    /* 右腿自起；失败时同时清除本周期左腿已经算出的输出。 */
-    result = falling_leg_control(RIGHT_Leg, first_cycle, now);
-    if (result == LEG_MOTION_TIMEOUT || result == LEG_MOTION_INVALID)
-    {
-        chassis_recovery_abort();
-        return;
-    }
-
-    /* 两腿都收腿完成后，进入独立计时的平衡交接阶段。 */
-    if (recovery_phase[LEFT_Leg] == RECOVERY_HOLD &&
-        recovery_phase[RIGHT_Leg] == RECOVERY_HOLD)
-    {
-        recovery_handoff_tick = now;
-        Chassis.chassis_mode = FALLING_TO_NORMAL;
-    }
+void falling_down(void)
+{
+    chassis_recovery_control();
 }
 
 void falling_to_down(void)
 {
-    uint32_t now = HAL_GetTick();
-    LegMotion_Result result;
-
-    if (Chassis.chassis_enable == OFFLINE)
-    {
-        chassis_zero_outputs();
-        chassis_recovery_reset();
-        return;
-    }
-    Chassis.Wheel_Motor[LEFT_Wheel].wheel_T = 0.0f;
-    Chassis.Wheel_Motor[RIGHT_Wheel].wheel_T = 0.0f;
-
-    /* 左腿保持已经完成的目标。 */
-    result = falling_leg_control(LEFT_Leg, 0U, now);
-    if (result != LEG_MOTION_DONE)
-    {
-        chassis_recovery_abort();
-        return;
-    }
-
-    /* 右腿保持已经完成的目标。 */
-    result = falling_leg_control(RIGHT_Leg, 0U, now);
-    if (result != LEG_MOTION_DONE)
-    {
-        chassis_recovery_abort();
-        return;
-    }
-
-    /* 姿态和腿长满足交接条件才恢复平衡，否则等待到交接超时。 */
-    if (chassis_recovery_handoff_ready())
-    {
-        Chassis.chassis_mode = NORMAL;
-    }
-    else if ((uint32_t)(now - recovery_handoff_tick) >= SPIN_HANDOFF_TIMEOUT_MS)
-    {
-        chassis_recovery_abort();
-    }
+    chassis_recovery_control();
 }
