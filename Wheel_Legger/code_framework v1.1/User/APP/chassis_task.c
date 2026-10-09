@@ -35,6 +35,7 @@ static void chassis_zero_outputs(void);
 static void chassis_recovery_reset(void);
 static void chassis_recovery_abort(void);
 static void chassis_recovery_control(void);
+static void chassis_leg_length_reference_update(void);
 
 
 PidTypedef LegLenth_Left_Pid;
@@ -45,6 +46,10 @@ PidTypedef LegLenth_Right_Pid;
 float F_roll;
 
 float fb_dt;
+
+/* Independent balance references; inspect .out in the debugger. */
+static ramp_function_source_t leg_length_ramp[2];
+static uint8_t leg_length_ramp_initialized;
 
 /* ---- 周期分段计时（临时插桩，用于定位 fb_dt = 6 ms 的去向）----
    t_sum 是任务自身的执行时间。若 t_sum 远小于 fb_dt，说明是被高优先级
@@ -57,6 +62,10 @@ static uint8_t recovery_output_pending;
 
 extern INS_t INS;
 Chassis_Info_Typedef Chassis = {
+    .set_goal = {
+        .set_L0_Left = 0.15f,
+        .set_L0_Right = 0.15f,
+    },
 	.Joint_Motor[LEFT_FRONT_id] = 
 	{
 		.Motor_Type = DM_J8009,
@@ -142,6 +151,7 @@ void chassis_task(void)
 		
 		YAW_Parameter_Processing();//yaw的目标角设置
 		falling_down_detect();//倒地检测
+        chassis_leg_length_reference_update();
 		if(Chassis.chassis_enable == OFFLINE)
 		{
 			/* enable off: zero output (cleared in Chassis_CanTransimit) */
@@ -356,6 +366,12 @@ void Chassis_CanTransimit(void)
 	if(Chassis.chassis_enable == ONLINE)
 	{
 		
+        /* 先限幅轮力矩，再转 int16_t 电流，避免越界后反向。 */
+		mySaturate(&Chassis.Wheel_Motor[LEFT_Wheel].wheel_T,-4.8f,4.8f);
+		mySaturate(&Chassis.Wheel_Motor[RIGHT_Wheel].wheel_T,-4.8f,4.8f);
+//		mySaturate(&Chassis.Wheel_Motor[LEFT_Wheel].wheel_T,-0.1f,0.1f);
+//		mySaturate(&Chassis.Wheel_Motor[RIGHT_Wheel].wheel_T,-0.1f,0.1f);
+
 		Chassis.Wheel_Motor[LEFT_Wheel].Data.SET_Current = Chassis.Wheel_Motor[LEFT_Wheel].wheel_T*LeftWheelT_TO_Current;
 		Chassis.Wheel_Motor[RIGHT_Wheel].Data.SET_Current = Chassis.Wheel_Motor[RIGHT_Wheel].wheel_T*RightWheelT_TO_Current;
 		VAL_LIMIT(Chassis.Wheel_Motor[LEFT_Wheel].Data.SET_Current,-16384,16384);
@@ -372,10 +388,6 @@ void Chassis_CanTransimit(void)
 		DM_Motor_Ctrl(&RIGHT_Joint_Motor_CAN_hfdcan,&Chassis.Joint_Motor[RIGHT_FRONT_id],0,0,0,0,-Chassis.leg_situation[RIGHT_Leg].vmc.torque_set[1],0);
 		DM_Motor_Ctrl(&RIGHT_Joint_Motor_CAN_hfdcan,&Chassis.Joint_Motor[RIGHT_BACK_id],0,0,0,0,-Chassis.leg_situation[RIGHT_Leg].vmc.torque_set[0],0);
 
-		mySaturate(&Chassis.Wheel_Motor[LEFT_Wheel].wheel_T,-4.8f,4.8f);
-		mySaturate(&Chassis.Wheel_Motor[RIGHT_Wheel].wheel_T,-4.8f,4.8f);
-//		mySaturate(&Chassis.Wheel_Motor[LEFT_Wheel].wheel_T,-0.1f,0.1f);
-//		mySaturate(&Chassis.Wheel_Motor[RIGHT_Wheel].wheel_T,-0.1f,0.1f);
 		 LESO_Feedback(Chassis.Wheel_Motor[LEFT_Wheel].wheel_T, 
                         Chassis.Wheel_Motor[RIGHT_Wheel].wheel_T,
                         Chassis.leg_situation[LEFT_Leg].vmc.Tp,
@@ -393,14 +405,48 @@ void Chassis_CanTransimit(void)
 	}
 }
 
+static void chassis_leg_length_reference_update(void)
+{
+    float dt = fb_dt;
+    uint8_t leg;
+
+    if (Chassis.chassis_enable != ONLINE || Chassis.chassis_mode != NORMAL)
+    {
+        leg_length_ramp_initialized = 0U;
+        return;
+    }
+
+    if (!isfinite(dt) || dt <= 0.0f || dt > 0.05f)
+    {
+        dt = Chassis_Time * 0.001f;
+    }
+
+    if (leg_length_ramp_initialized == 0U)
+    {
+        for (leg = 0U; leg < 2U; ++leg)
+        {
+            float length = Chassis.leg_situation[leg].vmc.L0;
+            /* Include entry feedback, especially recovery's 0.139 m stance. */
+            ramp_init(&leg_length_ramp[leg], dt,
+                      fmaxf(0.25f, length), fminf(0.15f, length));
+            leg_length_ramp[leg].input = LEG_LENGTH_RAMP_RATE_M_S;
+            leg_length_ramp[leg].out = length;
+        }
+        leg_length_ramp_initialized = 1U;
+        return;
+    }
+
+    leg_length_ramp[LEFT_Leg].frame_period = dt;
+    leg_length_ramp[RIGHT_Leg].frame_period = dt;
+    ramp_calc(&leg_length_ramp[LEFT_Leg], Chassis.set_goal.set_L0_Left);
+    ramp_calc(&leg_length_ramp[RIGHT_Leg], Chassis.set_goal.set_L0_Right);
+}
+
 void LEG_Lenth_Control(void)
 {
-	/* 腿长环改为对 (L0, d_L0) 的显式 PD，形式与下面的 roll 环一致。
-	   d_L0 由 VMC_calc_1 用雅可比和关节角速度解析算出，不是对 L0 做差分。
-	   set_L0 是档位常数，所以目标速率为 0。
-	   注意 LEG_PID_KD_RATE 与原 LEG_PID_KD 量纲不同，换算见 chassis_task.h。 */
-	float left_lenth_err   = Chassis.set_goal.set_L0_Left  - Chassis.leg_situation[LEFT_Leg].vmc.L0;
-	float right_lenth_err  = Chassis.set_goal.set_L0_Right - Chassis.leg_situation[RIGHT_Leg].vmc.L0;
+    /* Track the ramped position; keep measured-velocity damping. */
+	float left_lenth_err   = leg_length_ramp[LEFT_Leg].out  - Chassis.leg_situation[LEFT_Leg].vmc.L0;
+	float right_lenth_err  = leg_length_ramp[RIGHT_Leg].out - Chassis.leg_situation[RIGHT_Leg].vmc.L0;
 	float left_lenth_rate  = 0.0f - Chassis.leg_situation[LEFT_Leg].vmc.d_L0;
 	float right_lenth_rate = 0.0f - Chassis.leg_situation[RIGHT_Leg].vmc.d_L0;
 	float F_leg_L = LEG_PID_KP * left_lenth_err  + LEG_PID_KD_RATE * left_lenth_rate;
@@ -426,21 +472,13 @@ void falling_down_detect(void)
     float phi0_L = Chassis.leg_situation[LEFT_Leg].vmc.phi0;
     float phi0_R = Chassis.leg_situation[RIGHT_Leg].vmc.phi0;
 
-    /* OFF 到 ON 时复位自起阶段，再根据当前姿态选择自起或平衡。 */
+    /* OFF 到 ON 时统一复位并进入自起，由模块选择收腿或扫腿。 */
     if (Chassis.chassis_enable == ONLINE && last_enable == OFFLINE)
     {
         last_enable = ONLINE;
         chassis_recovery_reset();
-        if (phi0_L < 0.4f || phi0_L > 2.5f ||
-            phi0_R < 0.4f || phi0_R > 2.5f ||
-            fabs(Chassis.body_state.theta) > 0.3f)
-        {
-            Chassis.chassis_mode = FALLING_DOWN;
-        }
-        else
-        {
-            Chassis.chassis_mode = NORMAL;
-        }
+        /* Every enable edge completes recovery before NORMAL takes over. */
+        Chassis.chassis_mode = FALLING_DOWN;
         return;
     }
     last_enable = Chassis.chassis_enable;

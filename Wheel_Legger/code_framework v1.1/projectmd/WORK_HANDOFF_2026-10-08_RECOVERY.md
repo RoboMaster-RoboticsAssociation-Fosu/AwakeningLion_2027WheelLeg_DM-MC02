@@ -1,103 +1,90 @@
 ﻿# 2026-10-08 自起流程工作交接
 
-工作目录：`E:\ROBOT_NEW\9.22wheel_legger6\wheel_legger\Wheel_Legger\code_framework v1.1`。固件运行于 DM-MC02 / STM32H723VG；以 Keil MDK、ArmClang 6.16 工程为准。
+工作目录：`E:\ROBOT_NEW\9.22wheel_legger6\wheel_legger\Wheel_Legger\code_framework v1.1`。DM-MC02 / STM32H723VG，Keil MDK / ArmClang 6.16 为权威工程。
 
-当前已实现“转到 phi0=2.8 → 固定角度收腿 → 等两腿收完 → 同时转到 phi0=1.7 → 条件满足后 NORMAL”。原提前收腿窗口保留。本轮只整理文档并复验当前参数的主机测试，未烧录、未做实车验证。
+最新自起规则：**有效原始 phi0∈[0.4,2.82]（含边界）或扫腿到位，即锁存为收腿就绪；先就绪腿 Tp=0、保持当时实际腿长，等两腿都就绪后同拍收腿**。启动和 SWING 使用相同规则，就绪/收腿不检查 pitch，摆角漂移不取消就绪。
 
-## 1. 接手顺序与当前状态
+每次 OFF→ON 进入自起，上电已在线同样适用。双腿启动均就绪时，首拍共同收腿；单腿先就绪时在 SWING 中用 FREE 等待。共同用 300 ms 收至 0.139 m，两腿收完后的下一拍同时按最短路径用 600 ms 转到 1.6，再满足全部交接条件后 NORMAL。
 
-1. 先读本文确认当前参数、已验证范围和下一步，再读 [自起模块详细交接](LEG_MOTION_HANDOFF.md) 核对阶段与保护行为。
-2. 调整目标和动作时间时查看 [chassis_recovery.h](../User/Controller/chassis_recovery.h)；修改单腿接口前读 [LEG_MOTION.md](LEG_MOTION.md)。
-3. 修改代码前读 [CLAUDE.md](../CLAUDE.md)，按各文件原编码和行尾进行字节读写。
-4. 下一步是用当前参数重新做固件隔离构建，并记录实车阶段、角度、腿长及交接表现；修改参数后以源码为准更新验证记录。
+扫腿角度/长度斜坡仍为 4000/500 ms。当前 PID、正常腿长斜坡、轮输出和在线保护保留。本轮主机回归及隔离完整构建通过，未烧录、未实车验证。此前轮电流修复见 [起身打转排查](RECOVERY_SPIN_DIAGNOSIS_2026-10-08.md)。
 
-自起源文件及公共模块测试仍是未跟踪文件，相关底盘、单腿和文档也有未提交改动。本次没有暂存或提交。提交时逐个选择文件，包含新增的 `chassis_recovery.c/.h`、`chassis_recovery_verify.c`，保留工作区其他修改。
+## 本轮实车报告与回放：从 2.78 启动停留
 
-## 2. 已确认的接口和运动规则
+用户提供 chassis_mode/result/phase[0]/phase[1]=0/1/0/0，已超过 4 秒，phi0 约 2.78；随后确认扫腿摆到该位置能收腿，直接从该位置启动则不能。实际模块回放显示：固定负方向从 2.78 转向 2.82 会选择 -6.243186 rad，静止反馈下仍 SWING、Tp=-12；正常负向摆到该位置则可收腿。合并范围前的快照也复现同样起点差异。
 
-| 模块 | 职责与入口 |
+本轮扩大并统一就绪范围，取消单腿先收例外，改为就绪腿自由等待、两腿共同收腿。原故障回放修复后 phases=1/1、Tp=0，主机与固件构建通过；尚未由代理烧录或实车验收。
+
+## 此前实车反馈：PID 调参解决另一项停留问题（2026-10-08）
+
+用户报告腿看似摆到位、机体 theta 约 -0.18 rad 时保持姿态，无法进入 NORMAL。实车读数为 chassis_mode=0、recovery.result=1、phase[0]=3、phase[1]=4，即自起运行中、左腿仍 ALIGN、右腿已 HOLD；尚未进入检查 pitch 的交接阶段。
+
+**用户确认原因是 PID 参数问题，调参后已解决。** 本次排查未修改控制逻辑，也未通过放宽 pitch 或到位判据处理。具体调整的 PID 项及前后数值未提供，不将当前源码参数推定为已确认的实车调参记录。详细经过见 [自起交接的验证记录](LEG_MOTION_HANDOFF.md#验证记录与复现)。
+
+下文参数和构建结果已更新为本轮同步就绪与收腿修改后的工作区快照；上述用户实车结论仅覆盖 PID 调参解决的停留问题，不代表本轮同步就绪与收腿已完成实车验收。
+
+## 接手顺序
+
+1. 修改代码前读 [CLAUDE.md](../CLAUDE.md)，保持每个文件原编码和行尾。
+2. 阶段、保护和实车观测见 [自起模块详细交接](LEG_MOTION_HANDOFF.md)；单腿接口见 [LEG_MOTION.md](LEG_MOTION.md)。
+3. 从当前隔离产物开始实车验证，记录收腿期间自由摆动、第二段重新捕获角度和交回 NORMAL 的表现；根据实测再调整参数。
+
+## 当前行为与接口
+
+- 开启入口：OFF→ON 复位并进入 FALLING_DOWN，上电已在线同样适用。模块启动及 SWING 先只读计算双方收腿就绪，再依次执行左、右腿。
+- `ChassisRecovery_InEarlyWindow(float phi0)` 签名保持，查询有效原始角 [SPIN_RETRACT_PHI0_MIN_RAD,SPIN_RETRACT_PHI0_MAX_RAD]（0.4～2.82），不归一化、不依赖方向、不看 pitch。上界引用第一目标 SPIN_TARGET_PHI0_RAD。
+- 上下文新增 `sweep_arrived[2]`，统一锁存启动与运行中的就绪。就绪腿仍 SWING，用 FREE、两个参考时间 0 保持进入时实际腿长，后续命令锁存；摆角漂移不取消状态。两腿就绪才共同 RETRACT，同拍重新捕获实际腿长，收腿/复位清除标志。在线 NORMAL 不因进入范围重启自起。
+- 单腿命令为 angle_control、direction、target_phi0_rad、angle_duration_ms、length_duration_ms、length_m、timeout_ms；逐字段赋值，start=1 仅用于新动作启动当拍，之后 start=0，命令锁存。
+- `angle_control`：`LEG_MOTION_POSITION=0` 为现有摆角位置控制；`LEG_MOTION_FREE=1` 始终 Tp=0，取消摆角 PD、角速度阻尼和摆角重力补偿，只控制腿长。
+- FREE 保留实际连续角更新、反馈有限性、正腿长及半圈采样歧义检查。上下文 actual/reference/target_angle_rad 均采用 q=phi0−π/2 连续角；FREE 中目标角和参考角随实际角变化，不是固定控制目标。command.target_phi0_rad 仍锁存，仅作启动记录。
+- 范围外仍扫腿：单腿角度斜坡结束且当前连续角误差严格小于 0.05 rad 也可锁存就绪。就绪腿 Tp=0 保持当时腿长，不要求回到扫腿目标，不单独缩腿；无需等待扫腿长度斜坡或伸到 0.39 m。
+- SWING 运行中切换 FREE 前，先调用原单腿动作验证当前反馈，包含半圈采样歧义；失败立即中止且不推进另一腿。验证输出不发送，成功后建立 FREE，仅回写最终输出。
+- `RETRACT` / `WAIT_ALIGN`：采用 FREE，Tp 全程为零；F0 保留腿长插值、PD、伸缩重力补偿和限幅。时间结束且长度误差小于 0.02 m 即完成，摆角偏离不阻止完成。先收完腿只保持短腿长；收腿参考时间为 300 ms，目标 0.139 m。
+- 两腿均 WAIT_ALIGN 的下一拍，恢复 POSITION，共用 now_ms，各自捕获实际角和长度，按最短路径用 600 ms 转向 1.6 rad。自由摆动后不预设方向；半圈沿扫腿方向，同姿态不绕圈。
+- `ALIGN` 仍要求单腿 DONE、斜坡结束和当前连续角误差小于 0.05 rad；两腿 HOLD 当拍只进入 HANDOFF，下一拍才检查 NORMAL。
+- 交接仍要求 phi0 距 `SPIN_ALIGN_TARGET_PHI0_RAD`（1.6 rad）小于 0.05 rad、原始 phi0∈收腿上下界宏定义的 [0.4,2.82]、有限 |pitch|<`SPIN_HANDOFF_PITCH_MAX_RAD`（当前 0.5 rad）、腿长误差<0.02 m、|d_L0|<0.05 m/s；先就绪后超时。收腿不检查 pitch；在线倒地检测的原 0.3 rad 阈值保持。
+
+阶段编号保持：0=SWING（POSITION 扫腿或 FREE 就绪等待）、1=RETRACT、2=WAIT_ALIGN、3=ALIGN、4=HOLD。phase=0 需结合 sweep_arrived 与 angle_control 区分；FREE 等待的单腿 DONE 不代表已经收完。底盘两个倒地模式均通过 chassis_recovery_control() 调用模块。
+
+## 当前参数（本轮构建快照）
+
+| 参数 | 当前值 |
 | --- | --- |
-| [leg_motion.c/.h](../User/Controller/leg_motion.h) | `LegMotion_Run()`：单腿定向选路、连续角展开、角度与长度同步插值、PD 与重力补偿、完成后保持。 |
-| [chassis_recovery.c/.h](../User/Controller/chassis_recovery.h) | `ChassisRecovery_Run()` / `ChassisRecovery_Reset()`：两腿动作上下文、阶段、共享截止和交接条件。 |
-| [chassis_task.c](../User/APP/chassis_task.c) | `chassis_recovery_control()`：传入反馈、回写 F0/Tp、轮输出清零、模式切换、故障最终清零；判姿及 VMC 检查保留在底盘。 |
-| [controller.c/.h](../User/Controller/controller.h) | 原通用控制工具；本轮自起通过前两个模块执行。 |
+| 第一段目标 / 方向 | 2.82 rad / 负方向 |
+| 扫腿角度 / 腿长斜坡时间 | SPIN_SWING_ANGLE_TIME_MS=4000 ms / SPIN_SWING_LENGTH_TIME_MS=500 ms |
+| 扫腿目标长度 | 0.39 m |
+| 收腿时间 / 长度 | 300 ms / 0.139 m |
+| 第二段目标 / 时间 | 1.6 rad / 600 ms |
+| 交接 pitch 阈值 | SPIN_HANDOFF_PITCH_MAX_RAD=0.5f，严格小于 |
+| 原始 phi0 就绪范围 / 到位误差 | [0.4, 2.82] rad（两端包含）/ 0.05 rad |
+| 共享总超时 / 交接超时 | 600000 ms / 500 ms |
+| 单腿角度 Kp/Kd | 150 / 2，仅 POSITION 生效 |
+| 单腿长度 Kp/Kd | 1800 / 100 |
+| 单腿 Tp/F0 限幅 | ±12 N·m / ±40 N；FREE 的 Tp=0 |
 
-`falling_down()`、`falling_to_down()` 都只调用一次 `chassis_recovery_control()`。
+自起参数位于 chassis_recovery.h，单腿参数位于 leg_motion.h。本轮统一范围内就绪与双腿共同收腿，现有时间及其余用户调参保留；该表不是已确认的实车 PID 调参前后记录。
 
-单腿命令逐字段赋值：`target_phi0_rad`、`direction`、`duration_ms`、`length_m`、`timeout_ms`。目标直接使用 VMC phi0 弧度，竖直向下为 π/2；正方向增大、负方向减小。左右腿已经做镜像转换，共用方向约定。旧绝对/相对模式和度数命令已移除；同姿态不额外转圈。
+## 验证与产物
 
-`start=1` 只在新动作启动当拍使用，捕获实际角度、腿长和时刻，之后保持 `start=0`；命令被锁存。收腿角度只捕获一次。上下文 `actual_angle_rad/reference_angle_rad/target_angle_rad` 使用 q=phi0−π/2 的连续角，不能直接当作 phi0 读取。
-
-```text
-SWING → RETRACT → WAIT_ALIGN → ALIGN → HOLD
-                  两腿均到此：下一拍同时启动 ALIGN
-两腿均 HOLD：当拍进入 HANDOFF，下一拍才检查 NORMAL 条件
-```
-
-- SWING：正常终点要求斜坡结束且当前连续角误差严格小于 0.05 rad；不额外要求腿长先到扫腿长度。原提前窗口 q∈[-0.9,0]，即 phi0 约 0.671～1.571 rad；进入即收腿，启动时已在窗内也直接收腿。
-- RETRACT：固定进入阶段当拍的实际 phi0，向短腿长插值；沿用单腿 DONE 的 0.25 rad 角误差、0.02 m 长度误差及斜坡结束条件。
-- WAIT_ALIGN：先收完腿持续保持，等另一腿也收完。两腿使用同一下一周期时刻启动第二段，各自重新捕获实际反馈。
-- ALIGN：方向只在启动时按最短路径锁存；2.8→1.7 为负方向，提前收腿角小于 1.7 时为正方向。半圈沿扫腿方向，同姿态不转。必须同时满足单腿 DONE、斜坡结束、当前连续角误差小于 0.05 rad 才进 HOLD。
-- 交接：两腿实际 phi0 距 1.7 小于 0.05 rad，原始 phi0 位于 [0.4,2.5]，有限俯仰绝对值小于 0.2 rad，腿长距目标小于 0.02 m，腿长速度绝对值小于 0.05 m/s。先检查就绪，再检查交接超时。
-
-## 3. 当前源码参数及调参位置
-
-本次读到的参数已在上一轮实现完成后调整；下表是交接时的当前值。
-
-| 宏/参数 | 当前值 | 所在文件 |
-| --- | --- | --- |
-| `SPIN_TARGET_PHI0_RAD` / `SPIN_SWEEP_DIR` | 2.8 rad / 负方向 | chassis_recovery.h |
-| `SPIN_RAMP_TIME_MS` / `SPIN_SCAN_LENGTH` | 4000 ms / **0.39 m** | chassis_recovery.h |
-| `SPIN_RETRACT_TIME_MS` / `SPIN_RETRACT_LENGTH` | **1000 ms** / 0.139 m | chassis_recovery.h |
-| `SPIN_ALIGN_TARGET_PHI0_RAD` / `SPIN_ALIGN_TIME_MS` | 1.7 rad / 1000 ms | chassis_recovery.h |
-| `SPIN_EARLY_ANGLE` / `SPIN_ANGLE_WINDOW` | 0.9 rad / 0.05 rad | chassis_recovery.h |
-| `SPIN_SCAN_TIMEOUT_MS` | 600000 ms，覆盖扫腿、收腿、等待和第二段 | chassis_recovery.h |
-| `SPIN_HANDOFF_TIMEOUT_MS` | **500 ms**，两腿 HOLD 后另计 | chassis_recovery.h |
-| 角度 Kp/Kd | 50 / 2 | leg_motion.h |
-| 腿长 Kp/Kd | 1000 / 100 | leg_motion.h |
-| Tp/F0 限幅 | ±12 N·m / ±40 N | leg_motion.h |
-
-上一轮通过固件构建时是 0.35 m 扫腿、500 ms 收腿、1000 ms 交接超时。现有隔离 hex/axf 对应上一轮配置，使用当前参数前须重新构建。
-
-若从 phi0=-0.57 开始，未触发提前窗口、两腿同步且完全跟踪：0～4 秒负向转到 2.8（连续表示为约 -3.483185 rad），长度向 0.39 m 插值；4～5 秒固定角收至 0.139 m；两腿收完后下一周期启动，约 5.001～6.001 秒转到 1.7；再下一周期检查交接。实际跟踪滞后或两腿不同步会推迟这些时刻。
-
-## 4. 保护行为与编程风格
-
-继续修改时须保持：
-
-- 左腿失败立即返回，右腿阶段及上下文不推进；右腿失败清除两腿本拍输出。
-- 动作共用首次启动时的总截止，新阶段只分配剩余时间；第二段不重置总计时。
-- 两腿第二段完成当拍仅进入交接，下一拍才检查 NORMAL；交接边界先判断就绪，再判断超时。
-- 禁用或故障当拍清零两腿 F0/Tp、映射关节力矩、轮力矩和电流。OFFLINE/ZERO_FORCE 跳过 VMC；`recovery_output_pending` 确保模式已切 NORMAL 的最后一帧仍检查自起映射。
-- OFF→ON 重新判姿并重新捕获反馈；在线 NORMAL 判倒地进入 ZERO_FORCE，等待再次 OFF→ON。Reset 复位阶段/计时，保留 motion 诊断记录。
-
-用户风格：四空格、沿用括号风格；明确依次调用左腿和右腿；命令、反馈逐字段赋值；直观 if/switch 和提前返回；关键步骤简短中文注释，宏后写中文含义。格式调整局限于修改位置。
-
-源码按原编码和行尾做字节级编辑；底盘 .c 为 GBK/CRLF，.h 为 GBK/LF；当前动作及自起模块为 UTF-8 无 BOM/CRLF。Markdown 使用 UTF-8 BOM/CRLF。
-
-## 5. 验证证据与续接事项
-
-| 验证 | 结果及适用范围 |
+| 检查 | 本轮结果 |
 | --- | --- |
-| 本次按当前源码重新运行主机测试 | 单腿 739、自起模块 1047、底盘接入 230，共 **2016 项断言通过**。包括提前窗口、不同步、第二段同拍启动、最短选路、连续角路径、0.05 rad 边界、腿长未到位、重启、超时、故障顺序及交接帧 VMC 清零。 |
-| 上一轮 Keil 隔离完整构建 | ArmClang 6.16：0 错误、0 警告；适用于上一轮参数。当前 0.39 m / 1000 ms 收腿 / 500 ms 交接配置尚未重新进行固件构建。 |
-| 上一轮 VMC/Jacobian | 两个数值脚本通过；几何与固件不同，仅验证公式。 |
-| 硬件 | 本轮未烧录，未做实车验证；成功率、任务耗时及机械表现尚无验证数据。 |
+| `node mdk_check/leg_motion_verify.js` | 单腿 1247 + 自起 1896 + 底盘接入 879；扫腿配置及范围轨迹 2394，共 6416 项断言通过。 |
+| `node mdk_check/wheel_output_verify.js` | 117 项检查通过，保留轮力矩先限幅再转换 int16_t 电流的修复。 |
+| `node mdk_check/leg_length_ramp_verify.js` | 65399 项检查通过，正常平衡腿长斜坡保留。 |
+| Keil 隔离完整重编 | ArmClang 6.16，0 错误、0 警告，退出码 0。 |
+| 硬件 | 本轮同步收腿修改未烧录、未实车验证；先前用户确认 PID 调参解决自起停留问题，见最新实车反馈。主机测试不覆盖真实 CAN、RTOS 时序和机械效果。 |
 
-主机测试入口：
+保留并复验 2.78 启动故障回归。覆盖 0.4、1.6、2.5、2.78、2.82、边界内外及 2π 原始偏移；左右就绪等待、实际长度保持、摆角漂移后仍就绪、伙伴进入范围或扫腿到位、共同收腿时刻、先收完腿继续等待及第二段同拍。原独立提前收腿预期已改为共同收腿；保留无效反馈、半圈采样、左右故障顺序、共享超时和禁用重启。当前及不等/零时间配置均通过。
 
-```powershell
-node mdk_check/leg_motion_verify.js
-```
+当前隔离工程：[recovery_sync_range_check.uvprojx](../build/recovery_sync_range_keil/recovery_sync_range_check.uvprojx)。产物：[HEX](../build/recovery_sync_range_keil/Objects/CtrlBoard-H7_IMU.hex)、[AXF](../build/recovery_sync_range_keil/Objects/CtrlBoard-H7_IMU.axf)；日志：[构建](../build/recovery_sync_range_keil/build.log)、[自起主机验证](../build/recovery_sync_range_keil/host.log)、[轮输出验证](../build/recovery_sync_range_keil/wheel.log)、[正常腿长斜坡](../build/recovery_sync_range_keil/ramp.log)。
 
-直接编译实际 C 模块；底盘接入测试提取当前适配、判姿、清零和 VMC 函数，硬件依赖使用桩。测试不覆盖真实 CAN、RTOS 调度或机械响应。默认编译器 gcc，可用 CC 指定；本机沙箱内编译器出现启动错误时，沙箱外本地执行已通过。
+隔离工程来自当前权威 Keil 工程，源路径为本机绝对路径；build 文件不随 Git 交付。迁移目录后应从权威工程重新生成。此前 recovery_unified_range_keil 为 [0.4,2.5] 独立提前收腿，不能代表本轮同步规则。修改前快照为 build/recovery_sync_range_baseline；其包含被替换的仅启动目标附近等待分支。2.78 故障回放及修复后结果位于 build/recovery_start_target_probe。
 
-本次主机输出记录：[recovery_handoff_20261008_host.log](../build/recovery_handoff_20261008_host.log)。上一轮构建日志：[build.log](../build/recovery_align_keil/build.log)。日志及隔离工程在本机 build/ 下，随 Git 交付时不自动携带；迁移工作目录后需从权威工程重新生成隔离工程。
+## 保留的保护与实车续接
 
-下一轮按以下顺序续接，每步保留结果：
+- 左腿失败立即返回、不推进右腿；右腿失败清零两腿当拍输出。收腿启动条件在执行前只读判断：范围查询使用本拍原始角，扫腿终点使用当前反馈推算连续角，而非上一拍到位标志。
+- 动作和等待共用首次自起启动的总截止，新阶段只分配剩余时间；交接单独计时。OFFLINE / ZERO_FORCE 跳过 VMC；故障或禁用清零 F0/Tp、映射关节力矩及轮输出。交接 NORMAL 最后一帧仍检查自起 VMC 映射。
+- OFF→ON 复位并进入自起，逐腿按原始角范围分流并捕获反馈；在线 NORMAL 判倒地进入 ZERO_FORCE。Reset 保留单腿诊断记录，故障定位需结合底盘模式。
+- 上车观察 phase[0]/[1]、motion[].command.angle_control、start_tick、实际/参考腿长、phi0/d_phi0、F0/Tp、pitch、torque_set[]、轮电流及 fb_dt/t_sum。观察 sweep_arrived[0]/[1]：先就绪腿等待，所有收腿情况的两腿 start_tick 都须相同；RETRACT/WAIT_ALIGN 的 Tp 必须为零，但缩腿关节力矩可以非零。
+- 实车重点增加 2.78 直接启动、范围边界、大 pitch、单腿先就绪时长度保持，以及 SWING 中进入范围时的动作记录；继续覆盖不等角度/长度扫腿时间，记录两条参考各自到目标及触发收腿的时刻；同时覆盖双腿 2.1、目标两侧、已在 1.6 附近、正常边界、非正常混合姿态的开启，以及上电已在线和 OFF→ON 重启；记录启动分流、两腿 phi0、Tp/F0、阶段、共同转动时刻及进入 NORMAL 的时刻。正常扫腿与混合路径继续按原要求验收。
 
-1. 核对最新宏值，重新隔离构建，要求 0 错误、无新增警告；保留主工程已有产物及用户改动。新自起模块已注册到权威 Keil 工程。
-2. 按用户后续安排上车验证，记录 phi0、L0、d_L0、pitch、F0/Tp、阶段和任务周期，覆盖正常扫腿、提前收腿、两腿不同步和 OFF→ON 重启。
-3. 观察 `chassis_recovery.phase[0]/[1]`：0=SWING、1=RETRACT、2=WAIT_ALIGN、3=ALIGN、4=HOLD；核对两腿 `motion[].start_tick` 同拍，`command.direction` 锁存，收腿目标只捕获一次。
-4. 同时观察 `Chassis.chassis_mode`、`motion[].result`、实际/参考连续角及长度、`torque_set[]`、`fb_dt/t_sum`。底盘故障中止会 Reset，自起 result 可能已回 IDLE；保留的 motion 记录与底盘模式需一起判断。
-5. 记录第二段到位后的交接等待时间、是否进入 NORMAL、进入后能否平衡，以及故障当拍输出是否归零，再依据实测调整参数。
+本轮未暂存或提交。保留任务开始时用户已有的主工程产物、Keil 工作区设置、2.82 rad 调参及上一轮修改；提交时逐个选择源文件、验证文件和文档。动作/自起源码采用 UTF-8 无 BOM + CRLF，底盘原 GBK 文件保持；Markdown 使用 UTF-8 BOM + CRLF。

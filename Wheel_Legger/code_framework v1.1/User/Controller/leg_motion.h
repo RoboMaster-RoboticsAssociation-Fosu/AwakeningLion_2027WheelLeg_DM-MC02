@@ -8,9 +8,9 @@
 #define LEG_MOTION_RAD_TO_DEG (180.0f / LEG_MOTION_PI) /* 弧度转角度的换算系数 */
 
 /* Rate-form PD gains; F0 is a force in N, Tp is a torque in N*m. */
-#define LEG_MOTION_ANGLE_KP 50.0f /* 摆腿角度比例增益，用角度误差计算虚拟摆腿力矩 */
+#define LEG_MOTION_ANGLE_KP 200.0f /* 摆腿角度比例增益，用角度误差计算虚拟摆腿力矩 */
 #define LEG_MOTION_ANGLE_KD 2.0f /* 摆腿角速度阻尼增益，用反馈角速度抑制摆动 */
-#define LEG_MOTION_LENGTH_KP 1000.0f /* 腿长比例增益，用长度误差计算虚拟伸缩力 */
+#define LEG_MOTION_LENGTH_KP 2000.0f /* 腿长比例增益，用长度误差计算虚拟伸缩力 */
 #define LEG_MOTION_LENGTH_KD 100.0f /* 腿长变化率阻尼增益，用反馈伸缩速度抑制振荡 */
 #define LEG_MOTION_TORQUE_MAX 12.0f /* 虚拟摆腿力矩 Tp 的正负限幅绝对值（N·m） */
 #define LEG_MOTION_FORCE_MAX 40.0f /* 虚拟伸缩力 F0 的正负限幅绝对值（N） */
@@ -27,6 +27,12 @@ typedef enum
 
 typedef enum
 {
+    LEG_MOTION_POSITION = 0, /* 控制摆角位置，默认模式。 */
+    LEG_MOTION_FREE = 1      /* 放开摆角，Tp 恒为零，只控制腿长。 */
+} LegMotion_AngleControl;
+
+typedef enum
+{
     LEG_MOTION_IDLE = 0,
     LEG_MOTION_RUNNING,
     LEG_MOTION_DONE,
@@ -37,10 +43,12 @@ typedef enum
 typedef struct
 {
     LegMotion_Direction direction;
-    float target_phi0_rad; /* Absolute VMC pose in radians; vertical = pi/2. */
-    uint32_t duration_ms;
+    float target_phi0_rad; /* POSITION target in VMC radians; FREE ignores the target. */
+    uint32_t angle_duration_ms; /* POSITION angle-reference ramp time; FREE ignores it. */
+    uint32_t length_duration_ms; /* Independent length-reference ramp time. */
     float length_m;
     uint32_t timeout_ms; /* Total deadline, measured from this command's start. */
+    LegMotion_AngleControl angle_control; /* Latched at start; set explicitly. */
 } LegMotion_Command;
 
 typedef struct
@@ -59,7 +67,8 @@ typedef struct
 
 /* Zero-initialize once, then keep a separate context for each leg.
  * Fields are public for debugger inspection; callers must not edit an active
- * context. All angle fields below use vertical = 0, in continuous radians. */
+ * context. All angle fields below use vertical = 0, in continuous radians.
+ * In FREE, reference_angle_rad and target_angle_rad follow actual_angle_rad. */
 typedef struct
 {
     LegMotion_Command command;
@@ -77,10 +86,14 @@ typedef struct
 /* Call once per control cycle, with adjacent actual turns strictly below pi.
  * start != 0 restarts from actual feedback and latches command. Otherwise the
  * command argument is ignored and may be NULL. The clock is in milliseconds.
- * duration_ms == 0 sets the reference immediately; timeout_ms must be positive.
- * Targets are phi0 poses modulo 2*pi and follow the selected direction.
+ * Each duration == 0 sets its reference immediately; timeout_ms must be positive.
+ * POSITION completes after both ramp times and both feedback tolerances.
+ * POSITION targets are phi0 poses modulo 2*pi in the selected direction.
  * An identical pose commands no extra turn, including targets shifted by 2*pi.
- * DONE is latched and continues holding the fixed target. TIMEOUT/INVALID are
+ * FREE outputs Tp=0 and completes from length duration and tolerance only;
+ * angle feedback is still validated and unwrapped. Set every command field.
+ * DONE holds length plus angle in POSITION, or length only in FREE.
+ * TIMEOUT/INVALID are
  * latched with zero output until restart. No HAL, CAN, delays or allocation. */
 LegMotion_Result LegMotion_Run(LegMotion_Context *context,
                                const LegMotion_Command *command,

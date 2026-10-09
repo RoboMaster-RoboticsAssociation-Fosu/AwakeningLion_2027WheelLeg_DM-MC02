@@ -245,6 +245,21 @@
           <WinNumber>1</WinNumber>
           <ItemText>t_sum</ItemText>
         </Ww>
+        <Ww>
+          <count>17</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>chassis_recovery</ItemText>
+        </Ww>
+        <Ww>
+          <count>18</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>leso</ItemText>
+        </Ww>
+        <Ww>
+          <count>19</count>
+          <WinNumber>1</WinNumber>
+          <ItemText>F_roll</ItemText>
+        </Ww>
       </WatchWindow1>
       <WatchWindow2>
         <Ww>

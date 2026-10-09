@@ -11,7 +11,24 @@
   
 /* ====== 参数区 ====== */
 
-extern float       leso_comp_scale;   /* 补偿强度0~1，调试器可实时改，0起步 */
+typedef enum
+{
+    LESO_WHEEL_OFF = 0,
+    LESO_WHEEL_COMMON = 1,
+    LESO_WHEEL_DIFF = 2,
+    LESO_WHEEL_FULL = 3
+} LESO_WheelMode_e;
+
+extern volatile uint8_t leso_wheel_mode; /* OFF / COMMON / DIFF / FULL. */
+extern volatile float leso_wheel_scale; /* Wheel injection target, 0..1. */
+extern volatile float leso_leg_scale;   /* Hip injection target, 0..1. */
+extern volatile float leso_dbg_comp_wheel; /* Maximum actual component scale. */
+extern volatile float leso_dbg_comp_wheel_common;
+extern volatile float leso_dbg_comp_wheel_diff;
+extern volatile float leso_dbg_dh_wheel_common; /* Raw common estimate, N*m. */
+extern volatile float leso_dbg_dh_wheel_diff;   /* Raw differential estimate, N*m. */
+extern volatile float leso_dbg_comp_leg;   /* Ramped actual hip scale. */
+extern volatile unsigned char leso_active; /* Any valid injection active. */
 extern const float leso_dlim[4];     /* 扰动限幅 N·m [左轮,右轮,左Tp,右Tp] */
 
 /* 站稳门限（进入注入的条件） */

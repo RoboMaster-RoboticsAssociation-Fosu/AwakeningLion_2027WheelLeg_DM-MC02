@@ -19,15 +19,15 @@ function run(program, args) {
     }
 }
 
-function compileAndRun(name, harness) {
+function compileAndRun(name, harness, sourceDir = path.join(root, "User", "Controller")) {
     const executable = path.join(temp, name + (process.platform === "win32" ? ".exe" : ""));
     ownedFiles.push(executable);
     run(compiler, [
         "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic", "-O0",
         "-finput-charset=UTF-8",
-        "-I", path.join(root, "User", "Controller"), "-I", temp,
-        path.join(root, "User", "Controller", "leg_motion.c"),
-        path.join(root, "User", "Controller", "chassis_recovery.c"),
+        "-I", sourceDir, "-I", temp,
+        path.join(sourceDir, "leg_motion.c"),
+        path.join(sourceDir, "chassis_recovery.c"),
         path.join(__dirname, harness),
         "-lm", "-o", executable,
     ]);
@@ -72,6 +72,28 @@ try {
     ownedFiles.push(excerpt);
     fs.writeFileSync(excerpt, recoverySource(), "utf8");
     compileAndRun("recovery", "recovery_verify.c");
+    compileAndRun("sweep_ramps", "sweep_ramp_verify.c");
+    // Compile copies of the actual modules with only the two ramp macros changed.
+    // This verifies unequal configurations without editing production parameters.
+    const controllerDir = path.join(root, "User", "Controller");
+    for (const name of ["leg_motion.c", "leg_motion.h", "chassis_recovery.c", "chassis_recovery.h"]) {
+        const destination = path.join(temp, name);
+        ownedFiles.push(destination);
+        fs.copyFileSync(path.join(controllerDir, name), destination);
+    }
+    const header = fs.readFileSync(path.join(controllerDir, "chassis_recovery.h"), "utf8");
+    const times = [[4000, 8000], [8000, 4000], [0, 4000], [4000, 0]];
+    for (const [angleTime, lengthTime] of times) {
+        let configured = header;
+        for (const [macro, value] of [["SPIN_SWING_ANGLE_TIME_MS", angleTime],
+                                      ["SPIN_SWING_LENGTH_TIME_MS", lengthTime]]) {
+            const pattern = new RegExp("^#define " + macro + " \\d+U", "gm");
+            if ([...configured.matchAll(pattern)].length !== 1) throw new Error("Missing ramp macro: " + macro);
+            configured = configured.replace(pattern, "#define " + macro + " " + value + "U");
+        }
+        fs.writeFileSync(path.join(temp, "chassis_recovery.h"), configured, "utf8");
+        compileAndRun("sweep_ramps_" + angleTime + "_" + lengthTime, "sweep_ramp_verify.c", temp);
+    }
 } finally {
     // Remove only files created by this run, then the empty owned directory.
     for (const file of ownedFiles) {

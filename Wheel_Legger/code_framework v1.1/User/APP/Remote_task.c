@@ -48,7 +48,7 @@ void remote_task(void)
 			{
 				if(remote_ctrl.rc.s1 == 2 || remote_ctrl.rc.s1 == 0)
 				{
-					Chassis.set_goal.set_L0_Left = Chassis.set_goal.set_L0_Right = 0.15f;
+					Chassis.set_goal.set_L0_Left = Chassis.set_goal.set_L0_Right = 0.159f;
 				}else if(remote_ctrl.rc.s1 == 1)
 				{
 					Chassis.set_goal.set_L0_Left = Chassis.set_goal.set_L0_Right = 0.25f;

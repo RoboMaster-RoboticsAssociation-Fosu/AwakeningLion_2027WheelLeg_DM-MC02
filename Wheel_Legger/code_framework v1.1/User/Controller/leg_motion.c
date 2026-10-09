@@ -46,6 +46,8 @@ static uint8_t LegMotion_FeedbackValid(const LegMotion_Feedback *feedback)
 static uint8_t LegMotion_CommandValid(const LegMotion_Command *command)
 {
     return command != NULL &&
+           (command->angle_control == LEG_MOTION_POSITION ||
+            command->angle_control == LEG_MOTION_FREE) &&
            (command->direction == LEG_MOTION_NEGATIVE ||
             command->direction == LEG_MOTION_POSITIVE) &&
            isfinite(command->target_phi0_rad) &&
@@ -71,7 +73,8 @@ LegMotion_Result LegMotion_Run(LegMotion_Context *context,
 {
     float angle;
     float delta;
-    float fraction;
+    float angle_fraction;
+    float length_fraction;
     float angle_error;
     float length_error;
     float F0;
@@ -106,25 +109,29 @@ LegMotion_Result LegMotion_Run(LegMotion_Context *context,
         {
             return LegMotion_Invalid(context);
         }
-        float target = LegMotion_WrapSigned(command->target_phi0_rad -
-                                             LEG_MOTION_PI * 0.5f);
-        /* Whole-turn offsets lose precision as the input magnitude grows.
-         * Apply this allowance only to the initial same-pose decision. */
-        float pose_epsilon = LEG_MOTION_SAME_POSE_EPSILON_RAD +
-            2.0f * FLT_EPSILON * fabsf(command->target_phi0_rad) +
-            2.0f * FLT_EPSILON * fabsf(feedback->phi0_rad);
-        delta = LegMotion_WrapSigned(target - angle);
-        if (fabsf(delta) <= pose_epsilon)
+        delta = 0.0f;
+        if (command->angle_control == LEG_MOTION_POSITION)
         {
-            delta = 0.0f;
-        }
-        else if (command->direction == LEG_MOTION_POSITIVE && delta < 0.0f)
-        {
-            delta += LEG_MOTION_TWO_PI;
-        }
-        else if (command->direction == LEG_MOTION_NEGATIVE && delta > 0.0f)
-        {
-            delta -= LEG_MOTION_TWO_PI;
+            float target = LegMotion_WrapSigned(command->target_phi0_rad -
+                                                 LEG_MOTION_PI * 0.5f);
+            /* Whole-turn offsets lose precision as the input magnitude grows.
+             * Apply this allowance only to the initial same-pose decision. */
+            float pose_epsilon = LEG_MOTION_SAME_POSE_EPSILON_RAD +
+                2.0f * FLT_EPSILON * fabsf(command->target_phi0_rad) +
+                2.0f * FLT_EPSILON * fabsf(feedback->phi0_rad);
+            delta = LegMotion_WrapSigned(target - angle);
+            if (fabsf(delta) <= pose_epsilon)
+            {
+                delta = 0.0f;
+            }
+            else if (command->direction == LEG_MOTION_POSITIVE && delta < 0.0f)
+            {
+                delta += LEG_MOTION_TWO_PI;
+            }
+            else if (command->direction == LEG_MOTION_NEGATIVE && delta > 0.0f)
+            {
+                delta -= LEG_MOTION_TWO_PI;
+            }
         }
         if (!isfinite(delta) || !isfinite(angle + delta))
         {
@@ -154,14 +161,27 @@ LegMotion_Result LegMotion_Run(LegMotion_Context *context,
     }
 
     elapsed = (uint32_t)(now_ms - context->start_tick);
-    fraction = (context->result == LEG_MOTION_DONE ||
-                context->command.duration_ms == 0U ||
-                elapsed >= context->command.duration_ms) ?
-               1.0f : (float)elapsed / (float)context->command.duration_ms;
-    context->reference_angle_rad = context->start_angle_rad +
-        (context->target_angle_rad - context->start_angle_rad) * fraction;
+    angle_fraction = (context->result == LEG_MOTION_DONE ||
+                      context->command.angle_duration_ms == 0U ||
+                      elapsed >= context->command.angle_duration_ms) ?
+                     1.0f : (float)elapsed / (float)context->command.angle_duration_ms;
+    length_fraction = (context->result == LEG_MOTION_DONE ||
+                       context->command.length_duration_ms == 0U ||
+                       elapsed >= context->command.length_duration_ms) ?
+                      1.0f : (float)elapsed / (float)context->command.length_duration_ms;
+    if (context->command.angle_control == LEG_MOTION_FREE)
+    {
+        /* 自由摆角只更新诊断角度，不建立固定角度目标。 */
+        context->target_angle_rad = context->actual_angle_rad;
+        context->reference_angle_rad = context->actual_angle_rad;
+    }
+    else
+    {
+        context->reference_angle_rad = context->start_angle_rad +
+            (context->target_angle_rad - context->start_angle_rad) * angle_fraction;
+    }
     context->reference_length_m = context->start_length_m +
-        (context->command.length_m - context->start_length_m) * fraction;
+        (context->command.length_m - context->start_length_m) * length_fraction;
     if (!isfinite(context->actual_angle_rad) ||
         !isfinite(context->reference_angle_rad) ||
         !isfinite(context->reference_length_m))
@@ -173,8 +193,10 @@ LegMotion_Result LegMotion_Run(LegMotion_Context *context,
     length_error = context->reference_length_m - feedback->length_m;
     if (context->result == LEG_MOTION_RUNNING)
     {
-        if (fraction == 1.0f &&
-            fabsf(angle_error) < LEG_MOTION_ANGLE_TOLERANCE_RAD &&
+        if (length_fraction == 1.0f &&
+            (context->command.angle_control == LEG_MOTION_FREE ||
+             (angle_fraction == 1.0f &&
+              fabsf(angle_error) < LEG_MOTION_ANGLE_TOLERANCE_RAD)) &&
             fabsf(length_error) < LEG_MOTION_LENGTH_TOLERANCE_M)
         {
             context->result = LEG_MOTION_DONE;
@@ -188,9 +210,13 @@ LegMotion_Result LegMotion_Run(LegMotion_Context *context,
 
     /* Preserve the existing physical-coordinate PD and gravity approximation.
      * Use the wrapped physical angle for gravity, continuous error for motion. */
-    Tp = LEG_MOTION_ANGLE_KP * angle_error -
-         LEG_MOTION_ANGLE_KD * feedback->angular_velocity_rad_s +
-         LEG_MOTION_LEG_WEIGHT_N * feedback->length_m * 0.5f * sinf(angle);
+    Tp = 0.0f;
+    if (context->command.angle_control == LEG_MOTION_POSITION)
+    {
+        Tp = LEG_MOTION_ANGLE_KP * angle_error -
+             LEG_MOTION_ANGLE_KD * feedback->angular_velocity_rad_s +
+             LEG_MOTION_LEG_WEIGHT_N * feedback->length_m * 0.5f * sinf(angle);
+    }
     F0 = LEG_MOTION_LENGTH_KP * length_error -
          LEG_MOTION_LENGTH_KD * feedback->length_velocity_m_s -
          LEG_MOTION_LOWER_LEG_WEIGHT_N * cosf(angle);

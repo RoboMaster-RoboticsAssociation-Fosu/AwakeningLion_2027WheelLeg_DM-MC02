@@ -32,8 +32,10 @@ static LegMotion_Command Command(LegMotion_Direction direction,
 {
     LegMotion_Command command;
     command.direction = direction;
+    command.angle_control = LEG_MOTION_POSITION;
     command.target_phi0_rad = target_phi0_rad;
-    command.duration_ms = duration_ms;
+    command.angle_duration_ms = duration_ms;
+    command.length_duration_ms = duration_ms;
     command.length_m = length_m;
     command.timeout_ms = timeout_ms;
     return command;
@@ -302,7 +304,7 @@ static void InvalidInputs(void)
     CHECK(LegMotion_Run(&context, &good, NULL, 0U, 1U, &output) ==
           LEG_MOTION_INVALID);
 
-    for (field = 0U; field < 8U; ++field)
+    for (field = 0U; field < 9U; ++field)
     {
         command = good;
         switch (field)
@@ -314,7 +316,8 @@ static void InvalidInputs(void)
             case 4U: command.length_m = 0.0f; break;
             case 5U: command.length_m = -0.10f; break;
             case 6U: command.length_m = INFINITY; break;
-            default: command.timeout_ms = 0U; break;
+            case 7U: command.timeout_ms = 0U; break;
+            default: command.angle_control = (LegMotion_AngleControl)2; break;
         }
         CHECK(LegMotion_Run(&context, &command, &feedback, 0U, 1U, &output) ==
               LEG_MOTION_INVALID);
@@ -352,8 +355,188 @@ static void InvalidInputs(void)
     NEAR(output.Tp, 0.0f);
 }
 
+static void FreeAngleRetraction(void)
+{
+    LegMotion_Context context = {0};
+    LegMotion_Output output;
+    LegMotion_Command command = Command(LEG_MOTION_NEGATIVE, -2.0f, 1000U, 0.139f, 2000U);
+    LegMotion_Feedback feedback = Feedback(2.82f, 0.39f);
+    const float angles[] = {3.1f, -3.0f, -2.0f, -1.3f, 0.2f};
+    unsigned int i;
+    command.angle_control = LEG_MOTION_FREE;
+    feedback.angular_velocity_rad_s = 4.0f;
+    CHECK(LegMotion_Run(&context, &command, &feedback, 100U, 1U, &output) == LEG_MOTION_RUNNING);
+    CHECK(output.Tp == 0.0f);
+    NEAR(context.target_angle_rad, context.actual_angle_rad);
+    NEAR(context.reference_angle_rad, context.actual_angle_rad);
+    /* A changed command without start cannot re-enable position control. */
+    command.angle_control = LEG_MOTION_POSITION;
+    for (i = 0U; i < 5U; ++i)
+    {
+        float fraction = (float)(i + 1U) / 5.0f;
+        feedback = Feedback(angles[i], 0.39f + (0.139f - 0.39f) * fraction);
+        feedback.angular_velocity_rad_s = 4.0f;
+        feedback.length_velocity_m_s = 0.03f;
+        CHECK(LegMotion_Run(&context, &command, &feedback, 100U + (i + 1U) * 200U,
+                            0U, &output) == (i == 4U ? LEG_MOTION_DONE : LEG_MOTION_RUNNING));
+        CHECK(context.command.angle_control == LEG_MOTION_FREE);
+        CHECK(context.start_tick == 100U);
+        CHECK(output.Tp == 0.0f);
+        NEAR(context.reference_length_m, feedback.length_m);
+        NEAR(context.reference_angle_rad, context.actual_angle_rad);
+        NEAR(context.target_angle_rad, context.actual_angle_rad);
+        NEAR(output.F0, -LEG_MOTION_LENGTH_KD * feedback.length_velocity_m_s -
+             LEG_MOTION_LOWER_LEG_WEIGHT_N * cosf(feedback.phi0_rad - LEG_MOTION_PI * 0.5f));
+    }
+    feedback = Feedback(1.2f, 0.15f);
+    CHECK(LegMotion_Run(&context, NULL, &feedback, 3000U, 0U, &output) == LEG_MOTION_DONE);
+    CHECK(output.Tp == 0.0f);
+    NEAR(context.reference_length_m, 0.139f);
+    command = Command(LEG_MOTION_POSITIVE, 1.7f, 1000U, 0.139f, 2000U);
+    CHECK(LegMotion_Run(&context, &command, &feedback, 3001U, 1U, &output) == LEG_MOTION_RUNNING);
+    CHECK(context.command.angle_control == LEG_MOTION_POSITION);
+    NEAR(context.start_angle_rad, 1.2f - LEG_MOTION_PI * 0.5f);
+    NEAR(context.target_angle_rad - context.start_angle_rad, 0.5f);
+    CHECK(LegMotion_Run(&context, NULL, &feedback, 3501U, 0U, &output) == LEG_MOTION_RUNNING);
+    CHECK(output.Tp > 5.0f);
+}
+
+static void FreeAngleGuards(void)
+{
+    unsigned int field;
+    for (field = 0U; field < 7U; ++field)
+    {
+        LegMotion_Context context = {0};
+        LegMotion_Output output;
+        LegMotion_Command command = Command(LEG_MOTION_POSITIVE, 1.2f, 1000U, 0.139f, 1200U);
+        LegMotion_Feedback feedback = Feedback(1.2f, 0.30f);
+        uint32_t origin = UINT32_MAX - 499U;
+        command.angle_control = LEG_MOTION_FREE;
+        CHECK(LegMotion_Run(&context, &command, &feedback, origin, 1U, &output) == LEG_MOTION_RUNNING);
+        switch (field)
+        {
+            case 0U: feedback.phi0_rad = NAN; break;
+            case 1U: feedback.angular_velocity_rad_s = INFINITY; break;
+            case 2U: feedback.length_m = NAN; break;
+            case 3U: feedback.length_m = 0.0f; break;
+            case 4U: feedback.length_velocity_m_s = NAN; break;
+            case 5U: feedback.phi0_rad += LEG_MOTION_PI; break;
+            default: break;
+        }
+        CHECK(LegMotion_Run(&context, NULL, &feedback, origin + 1200U, 0U, &output) ==
+              (field == 6U ? LEG_MOTION_TIMEOUT : LEG_MOTION_INVALID));
+        CHECK(output.F0 == 0.0f && output.Tp == 0.0f);
+        feedback = Feedback(1.2f, 0.139f);
+        CHECK(LegMotion_Run(&context, NULL, &feedback, origin + 1300U, 0U, &output) ==
+              (field == 6U ? LEG_MOTION_TIMEOUT : LEG_MOTION_INVALID));
+        CHECK(LegMotion_Run(&context, &command, &feedback, origin + 1400U, 1U, &output) == LEG_MOTION_RUNNING);
+        CHECK(LegMotion_Run(&context, NULL, &feedback, origin + 2400U, 0U, &output) == LEG_MOTION_DONE);
+        feedback.angular_velocity_rad_s = NAN;
+        CHECK(LegMotion_Run(&context, NULL, &feedback, origin + 2401U, 0U, &output) == LEG_MOTION_INVALID);
+        CHECK(output.F0 == 0.0f && output.Tp == 0.0f);
+    }
+}
+
+static void IndependentRampTimes(void)
+{
+    const uint32_t times[][2] = {{400U, 1000U}, {1000U, 400U}, {1000U, 1000U},
+                                {0U, 1000U}, {1000U, 0U}, {0U, 0U}};
+    unsigned int scenario;
+    for (scenario = 0U; scenario < sizeof(times) / sizeof(times[0]); ++scenario)
+    {
+        LegMotion_Context context = {0};
+        LegMotion_Output output;
+        LegMotion_Command command = Command(LEG_MOTION_POSITIVE, 2.4f, 1000U, 0.30f, 2000U);
+        LegMotion_Feedback feedback = Feedback(1.8f, 0.18f);
+        uint32_t angle_time = times[scenario][0], length_time = times[scenario][1];
+        uint32_t end = angle_time > length_time ? angle_time : length_time;
+        uint32_t origin = UINT32_MAX - 299U;
+        uint32_t elapsed;
+        command.angle_duration_ms = angle_time;
+        command.length_duration_ms = length_time;
+        CHECK(LegMotion_Run(&context, &command, &feedback, origin, 1U, &output) == LEG_MOTION_RUNNING);
+        NEAR(context.reference_angle_rad, (angle_time == 0U ? 2.4f : 1.8f) - LEG_MOTION_PI * 0.5f);
+        NEAR(context.reference_length_m, length_time == 0U ? 0.30f : 0.18f);
+        /* Both times are latched, even if later command arguments change. */
+        command.angle_duration_ms = 1U;
+        command.length_duration_ms = 1U;
+        for (elapsed = 0U; elapsed <= end; elapsed += 100U)
+        {
+            float angle_part = angle_time == 0U || elapsed >= angle_time ?
+                               1.0f : (float)elapsed / (float)angle_time;
+            float length_part = length_time == 0U || elapsed >= length_time ?
+                                1.0f : (float)elapsed / (float)length_time;
+            feedback = Feedback(1.8f + 0.6f * angle_part, 0.18f + 0.12f * length_part);
+            CHECK(LegMotion_Run(&context, &command, &feedback, origin + elapsed, 0U, &output) ==
+                  (elapsed >= end ? LEG_MOTION_DONE : LEG_MOTION_RUNNING));
+            NEAR(context.reference_angle_rad, feedback.phi0_rad - LEG_MOTION_PI * 0.5f);
+            NEAR(context.reference_length_m, feedback.length_m);
+            CHECK(context.command.angle_duration_ms == angle_time);
+            CHECK(context.command.length_duration_ms == length_time);
+            CHECK(context.start_tick == origin);
+        }
+        feedback = Feedback(2.4f, 0.30f);
+        CHECK(LegMotion_Run(&context, NULL, &feedback, origin + end + 500U, 0U, &output) == LEG_MOTION_DONE);
+        NEAR(context.reference_angle_rad, 2.4f - LEG_MOTION_PI * 0.5f);
+        NEAR(context.reference_length_m, 0.30f);
+    }
+}
+
+static void IndependentRampCompletion(void)
+{
+    unsigned int slower;
+    for (slower = 0U; slower < 2U; ++slower)
+    {
+        LegMotion_Context context = {0};
+        LegMotion_Output output;
+        LegMotion_Feedback feedback = Feedback(1.8f, 0.20f);
+        LegMotion_Command command = Command(LEG_MOTION_POSITIVE, 1.8f, 400U, 0.20f, 2000U);
+        command.angle_duration_ms = slower == 0U ? 1000U : 400U;
+        command.length_duration_ms = slower == 1U ? 1000U : 400U;
+        /* Zero travel and zero error must still wait for both reference times. */
+        CHECK(LegMotion_Run(&context, &command, &feedback, 0U, 1U, &output) == LEG_MOTION_RUNNING);
+        CHECK(LegMotion_Run(&context, NULL, &feedback, 400U, 0U, &output) == LEG_MOTION_RUNNING);
+        CHECK(LegMotion_Run(&context, NULL, &feedback, 999U, 0U, &output) == LEG_MOTION_RUNNING);
+        CHECK(LegMotion_Run(&context, NULL, &feedback, 1000U, 0U, &output) == LEG_MOTION_DONE);
+        command.angle_duration_ms = slower == 0U ? 3000U : 400U;
+        command.length_duration_ms = slower == 1U ? 3000U : 400U;
+        CHECK(LegMotion_Run(&context, &command, &feedback, 2001U, 1U, &output) == LEG_MOTION_RUNNING);
+        CHECK(LegMotion_Run(&context, NULL, &feedback, 4001U, 0U, &output) == LEG_MOTION_TIMEOUT);
+        CHECK(output.F0 == 0.0f && output.Tp == 0.0f);
+    }
+}
+
+static void FreeLengthDuration(void)
+{
+    LegMotion_Context context = {0};
+    LegMotion_Output output;
+    LegMotion_Feedback feedback = Feedback(2.1f, 0.30f);
+    LegMotion_Command command = Command(LEG_MOTION_NEGATIVE, 2.1f, 0U, 0.139f, 600U);
+    command.angle_control = LEG_MOTION_FREE;
+    command.angle_duration_ms = UINT32_MAX; /* Ignored in FREE, including completion. */
+    command.length_duration_ms = 300U;
+    CHECK(LegMotion_Run(&context, &command, &feedback, 0U, 1U, &output) == LEG_MOTION_RUNNING);
+    feedback = Feedback(1.2f, 0.139f);
+    CHECK(LegMotion_Run(&context, NULL, &feedback, 299U, 0U, &output) == LEG_MOTION_RUNNING);
+    CHECK(output.Tp == 0.0f);
+    CHECK(LegMotion_Run(&context, NULL, &feedback, 300U, 0U, &output) == LEG_MOTION_DONE);
+    CHECK(output.Tp == 0.0f);
+    command.length_duration_ms = 0U;
+    CHECK(LegMotion_Run(&context, &command, &feedback, 301U, 1U, &output) == LEG_MOTION_DONE);
+    CHECK(output.Tp == 0.0f);
+    command.length_duration_ms = 3000U;
+    CHECK(LegMotion_Run(&context, &command, &feedback, 302U, 1U, &output) == LEG_MOTION_RUNNING);
+    CHECK(LegMotion_Run(&context, NULL, &feedback, 902U, 0U, &output) == LEG_MOTION_TIMEOUT);
+    CHECK(output.F0 == 0.0f && output.Tp == 0.0f);
+}
+
 int main(void)
 {
+    IndependentRampTimes();
+    IndependentRampCompletion();
+    FreeLengthDuration();
+    FreeAngleRetraction();
+    FreeAngleGuards();
     /* Both routes across the VMC phi0 boundary at +/-pi. */
     AbsolutePath(3.0f, -3.0f, LEG_MOTION_POSITIVE, 2.0f * LEG_MOTION_PI - 6.0f);
     AbsolutePath(3.0f, -3.0f, LEG_MOTION_NEGATIVE, -6.0f);

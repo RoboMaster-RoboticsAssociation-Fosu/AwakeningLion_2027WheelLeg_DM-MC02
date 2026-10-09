@@ -6,7 +6,9 @@
 #include "DJI_Motor.h"
 #include "VMC_calc.h"
 /*********************************/
-#define LEG_PID_KP  1600.0f
+#define LEG_LENGTH_RAMP_RATE_M_S 0.15f /* Balance length reference speed (m/s). */
+
+#define LEG_PID_KP  2000.0f
 #define LEG_PID_KI  0.0f
 //#define LEG_PID_KD  800.0f
 /* 腿长环速率增益，直接作用在 vmc.d_L0 上，单位 N*s/m。
@@ -14,7 +16,7 @@
    等效速率增益 = LEG_PID_KD * 循环周期T。T=4ms 时为 16，T=6ms 时为 24。
    先读实测 fb_dt，按 LEG_PID_KD * fb_dt 取初值再调。
    改成这个形式后腿长环微分增益不再随循环周期变化。 */
-#define LEG_PID_KD_RATE  300.0f
+#define LEG_PID_KD_RATE  200.0f
 #define LEG_PID_MAX_OUT  90.0f //90牛
 #define LEG_PID_MAX_IOUT 0.0f
 
@@ -25,7 +27,7 @@
 #define ROLL_PID_MAX_OUT  60.0f
 #define ROLL_PID_MAX_IOUT 0.0f
 
-#define body_mg (13.0f*9.8f)
+#define body_mg (16.0f*9.8f)
 
 #define LeftWheelT_TO_Current -3330.0f //左轮子力矩转电流
 #define RightWheelT_TO_Current 3330.0f //右轮子力矩转电流

@@ -79,9 +79,9 @@ if hasattr(sys.stdout, "reconfigure"):
 # ★★★ 用户开关（常用项都放这里, 改完直接运行）★★★
 # =============================================================================
 # ---- 输出内容: 1 = 生成该组数据, 0 = 跳过(连计算也跳过, 拟合提速) ----
-USE_K = 0      # LQR 增益 K:   K_fixed.txt + K_Fit_Coefficients.txt
+USE_K = 1      # LQR 增益 K:   K_fixed.txt + K_Fit_Coefficients.txt
 USE_L = 0      # LESO 增益 L:  L_fixed.txt + L_Fit_Coefficients.txt
-USE_AD_BD = 1  # ZOH 离散模型: Ad/Bd_fixed.txt + Ad/Bd_Fit_Coefficients.txt (拼 A_e/B_e 用)
+USE_AD_BD = 0  # ZOH 离散模型: Ad/Bd_fixed.txt + Ad/Bd_Fit_Coefficients.txt (拼 A_e/B_e 用)
 # ---- 机械数据来源: 机械给不出 CAD/实测数据时用公式临时估算, 到位后改 0 换实测 ----
 USE_FORMULA_INERTIA = 1   # 1: I_w/I_b/I_z 公式估算(覆盖声明值); 0: 用 PARAMS 声明值
 USE_LEG_FORMULA = 1       # 1: 腿部 lw/lb/Il 用经验公式; 0: 用 LEG_DATA 实测表插值
@@ -288,7 +288,7 @@ PARAMS = {
     'l_c': 0.120,        # 机体质心到腿部关节中心点距离 (m)
     'm_w': 0.537,        # 驱动轮质量 (kg)
     'm_l': 1.65,         # 腿部质量 (kg)
-    'm_b': 11.0,         # 机体质量 (kg)
+    'm_b': 16.0,         # 机体质量 (kg)
 
     # ---- 转动惯量声明值 (USE_FORMULA_INERTIA=0 时才生效) ----
     'I_w': 0.000516,     # 驱动轮转动惯量 (kg·m?)
@@ -333,11 +333,11 @@ LEG_DATA = np.array([
 # 代价是输出力矩更大、对该状态测量噪声更敏感。如上 theta_b=20000 最大(平衡最重要),
 # dtheta_* 都只有 5(角速度噪声大, 权重压低防抖)。
 #                         s          ds         phi        dphi    theta_ll   dtheta_ll    theta_lr   dtheta_lr     theta_b    dtheta_b
-Q_LQR = np.diag([     100.0,       20.0,      100.0,       20.0,      400.0,        5.0,      400.0,        5.0,    10000.0,        1.0])
+Q_LQR = np.diag([     150.0,       25.0,      200.0,       20.0,      400.0,        20.0,      400.0,        20.0,    20000.0,        1.0])
 # R 对角线依次对应 4 个输入力矩 (N·m): T_wl(左驱动轮) T_wr(右驱动轮) T_bl(左髋关节) T_br(右髋关节)
 # R 越大越"省力" -> 力矩输出越小、动作越保守。
 #                   T_wl    T_wr    T_bl    T_br
-R_LQR = np.diag([ 20.0,  20.0,   4.0,   4.0])
+R_LQR = np.diag([ 15.0,  15.0,   4.0,   4.0])
 
 # ---- LQR / LESO 共用采样周期及观测器参数 ----
 Ts = 0.001               # 控制周期 (s); K 和 L 均基于该周期的 ZOH 离散模型

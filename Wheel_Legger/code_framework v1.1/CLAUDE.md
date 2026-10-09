@@ -84,17 +84,24 @@ tail -3 MDK-ARM/build.log        # -o 的路径相对工程目录 MDK-ARM/
 继续 2026-10-08 自起工作时，先读 [最新工作交接](projectmd/WORK_HANDOFF_2026-10-08_RECOVERY.md)。修改自起阶段、重启、超时或交接时，先读 [倒地自起封装交接](projectmd/LEG_MOTION_HANDOFF.md)；调用单腿动作接口时，读 [LEG_MOTION.md](projectmd/LEG_MOTION.md)。前者记录阶段边界、验证结果和实车续接事项，后者记录命令参数与调用示例。
 
 ```text
-OFF→ON 位姿判为倒地 → FALLING_DOWN（两腿各自 SWING → RETRACT → WAIT_ALIGN）
+OFF→ON 统一复位 → FALLING_DOWN
+启动及 SWING：每腿原始 phi0∈[0.4,2.82] 或扫腿到位 → 锁存就绪
+先就绪腿在 SWING 中 FREE 保持实际腿长、Tp=0；两腿就绪 → 同拍 RETRACT
+RETRACT / WAIT_ALIGN：FREE 模式，Tp=0，仅控制腿长
 两腿均 WAIT_ALIGN → 下一拍同启 ALIGN → 各自 HOLD
 两腿均 HOLD → FALLING_TO_NORMAL（保持 + 交接条件）→ NORMAL
 在线 NORMAL 判为倒地 → ZERO_FORCE，等待 OFF→ON
 自起超时、无效反馈或自起映射异常 → 当周期 ZERO_FORCE
 ```
 
-- `falling_down_detect()` 保留开启时位姿复检：任一腿 phi0 ∉ [0.4, 2.5]，或 |pitch| > 0.3，则进 FALLING_DOWN；其余情况进 NORMAL。在线 NORMAL 持续检测，超出范围进入 ZERO_FORCE。
+- `falling_down_detect()` 在每次 OFF→ON 时复位并进入 FALLING_DOWN。启动及 SWING 中有效原始 phi0∈[0.4,2.82]（含边界）或满足原扫腿终点时，锁存 `sweep_arrived[leg]`。先就绪腿仍为 SWING，用 FREE 保持进入时实际腿长、Tp=0，摆角漂移不取消就绪；两腿都就绪才同拍 RETRACT。范围上界 `SPIN_RETRACT_PHI0_MAX_RAD` 引用扫腿目标，当前 2.82；就绪/收腿不检查 pitch。在线 NORMAL 原倒地检测保持。
 - 单腿控制由 `User/Controller/leg_motion.c/.h` 的 `LegMotion_Run()` 实现。自起阶段、计时和交接判断集中在 `User/Controller/chassis_recovery.c/.h`；`falling_down()` 和 `falling_to_down()` 均只调用 `chassis_recovery_control()`，由适配函数传入反馈、回写输出并切换底盘模式。旧级联倒地控制实现及对应 PID 对象已清理。
-- 单腿命令直接指定 `target_phi0_rad`、方向、共同斜坡时间、目标腿长和总超时；phi0 为 VMC 坐标弧度，竖直向下为 π/2，同姿态不额外转圈。自起参数集中在 `chassis_recovery.h`：`SPIN_SWEEP_DIR` 为 `LEG_MOTION_NEGATIVE`，`SPIN_TARGET_PHI0_RAD`=2.8 rad；两腿收完后同拍启动 1 秒最短方向转动，`SPIN_ALIGN_TARGET_PHI0_RAD`=1.7 rad。两段转动均要求斜坡结束且当前连续角误差小于 0.05 rad；保留原提前收腿窗口。
-- 两腿收腿阶段分别锁存，进入时只捕获一次实际 phi0，参考用 1 s 收至 0.139 m；先收完的腿 WAIT_ALIGN 保持，第二段启动时各自捕获实际反馈并锁存方向。左腿失败即停止推进右腿；右腿失败时两腿输出一并清零。两腿第二段均完成当拍仅进入交接，下一拍开始检查条件；交接先检查就绪，再检查超时，检查包括原正常 phi0 范围。
+- 单腿命令的时间为 `angle_duration_ms`、`length_duration_ms`，同拍捕获实际反馈后独立插值，旧 `duration_ms` 已移除；POSITION 完成要求两条轨迹时间及到位容差，FREE 只看腿长时间和容差。所有命令字段均显式赋值并在启动时锁存。
+- 单腿命令包含 `angle_control`，显式指定 `LEG_MOTION_POSITION=0` 或 `LEG_MOTION_FREE=1`，启动时锁存；其余字段仍逐项赋值。POSITION 用 VMC phi0 弧度定向选路，竖直向下为 π/2；FREE 始终 Tp=0，长度参考、PD 和伸缩重力补偿照常运行，诊断目标角/参考角跟随实际连续角。
+- 自起参数集中在 `chassis_recovery.h`：需要扫腿时，负方向扫向 2.82 rad；角度/腿长时间分别为 `SPIN_SWING_ANGLE_TIME_MS` / `SPIN_SWING_LENGTH_TIME_MS`（当前 4000 / 500 ms）。范围外的单腿角度斜坡结束且连续角误差小于 0.05 rad 即可锁存就绪，不等长度斜坡结束。先就绪腿 FREE 保持当时实际腿长，随后两腿同拍收腿；已就绪腿不要求返回扫腿目标。收腿及 WAIT_ALIGN 使用 FREE，300 ms 收至 0.139 m，仅以时间和腿长误差小于 0.02 m 判完成。
+- 两腿均 WAIT_ALIGN 的下一拍同启第二段，恢复 POSITION，各自从自由摆动后的实际反馈选最短方向，600 ms 转向 1.6 rad；要求斜坡结束、单腿 DONE 和连续角误差小于 0.05 rad。左腿失败不推进右腿，右腿失败清零两腿；共享总截止不重置。两腿第二段均完成当拍仅进入交接，下一拍检查 NORMAL，先就绪后超时。
+- NORMAL 交接要求两腿到位、腿长及腿长速度符合原条件，pitch 绝对值严格小于 `SPIN_HANDOFF_PITCH_MAX_RAD`（当前 0.5 rad）。这是交接阈值；自起收腿不看 pitch，在线倒地检测仍用原 0.3 rad。
+- 运行中 SWING 切换 FREE 前先用原单腿命令验证本拍反馈（含半圈采样歧义），验证输出不发送；成功后建立 FREE 并只回写最终输出。左腿失败不推进右腿就绪标志。
 - `ZERO_FORCE` 分支保留 break；清零同时覆盖腿虚拟输出、映射关节力矩和轮输出。零力及禁用状态跳过 VMC 映射；交回 NORMAL 的最后一帧仍检查自起映射结果。
 
 ## 3. 其他陷阱
@@ -102,15 +109,15 @@ OFF→ON 位姿判为倒地 → FALLING_DOWN（两腿各自 SWING → RETRACT �
 - **CubeMX 重新生成会冲掉手改**：`.ioc` 和代码不一致，下面这些改动都在 USER CODE 块之外。
   - `FreeRTOSConfig.h` 的 `INCLUDE_vTaskDelayUntil 1`：变回 0 时 `osDelayUntil` 会直接返回，chassis 任务不再阻塞，低优先级任务会被饿死。
   - `freertos.c` 的 CHASSIS 栈是 1024（`.ioc` 里是 512），PS2 任务的创建被注释掉了。
-- 烧录或复位后，如果遥控 s2 已经在 ONLINE 档，上电就等同于一次 OFF→ON：车会直接进 NORMAL 平衡，或者开始扫腿。
-- 轮力矩的 `mySaturate(wheel_T, ±4.8)` 写在**发送之后**。实际下发只受电流 ±16384（约 ±4.9 N·m）限制，这个限幅只影响回灌给 LESO 的值。真要限制轮力矩，得挪到算 `SET_Current` 之前。
+- 烧录或复位后，如果遥控 s2 已经在 ONLINE 档，上电就等同于一次 OFF→ON：统一进入自起，再按每腿原始 phi0 选择直接收腿或扫腿。
+- 轮输出顺序保持为：`wheel_T` 限幅 ±4.8 N·m → 换算 `int16_t SET_Current` → 电流限幅 → CAN 发送。2026-10-08 已修复限幅落在发送后的回归：约 9.84 N·m 以上的换算值越过 int16_t 范围，可翻转电流方向。修改轮输出时运行 `node mdk_check/wheel_output_verify.js`；复现及旧版对照见 [起身打转排查](projectmd/RECOVERY_SPIN_DIAGNOSIS_2026-10-08.md)。
 - `Gear_Ratio` 宏没加括号（`268.0f/17.0f`），只能写在 `(Gear_Ratio*…)` 里；写成 `x/Gear_Ratio` 会算错。
 - `Remote_Is_Offline()` 写了但没人调用：遥控失联后 `remote_ctrl` 停在最后一帧，s2 仍是 ONLINE，摇杆量也照样生效。
 
 ## 4. 待实测 / 已知风险
 
 - 连续检测在瞬态超出范围时就会触发 ZERO_FORCE。这时车可能还站着，腿一软就直接砸下去，不是受控自启。
-- 位姿判据只看 phi0 和 pitch，不看 roll，侧躺时可能漏判成 NORMAL。
+- 位姿判据只看 phi0 和 pitch，不看 roll，侧躺时也可能因 phi0 在范围内选择直接收腿路径。
 - `SPIN_SCAN_TIMEOUT_MS` 现在是 600000（10 分钟），plan 里的设计值是 6 s。上车前确认是不是调试留下的。
 
 ## 5. 编码现状与注释恢复
