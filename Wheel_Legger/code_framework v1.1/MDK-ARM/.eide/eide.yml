@@ -141,6 +141,7 @@ virtualFolder:
         - path: ../User/APP/chassis_task.c
         - path: ../User/APP/ps2_task.c
         - path: ../User/APP/Remote_task.c
+        - path: ../User/APP/board_comm_task.c
       folders: []
     - name: bsp
       files:
@@ -153,6 +154,8 @@ virtualFolder:
     - name: Controller
       files:
         - path: ../User/Controller/controller.c
+        - path: ../User/Controller/leg_motion.c
+        - path: ../User/Controller/chassis_recovery.c
       folders: []
     - name: Config
       files:

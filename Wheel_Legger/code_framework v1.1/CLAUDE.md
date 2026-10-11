@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-正文中文，写给下一个会话，也给人看。最后更新：2026-10-08。
+正文中文，写给下一个会话，也给人看。最后更新：2026-10-10。
 
 达妙 DM-MC02 板（STM32H723VG）上的双轮腿平衡机器人固件：CubeMX 生成的 HAL + FreeRTOS（CMSIS-RTOS v1），用 Keil MDK 编译。
 git 仓库根在上两级 `wheel_legger/`；离线算增益的 Python 脚本在上一级（`../ABK_LQR.py`、`../lqr_k_calc/`，见 §2.5）。
@@ -80,6 +80,8 @@ tail -3 MDK-ARM/build.log        # -o 的路径相对工程目录 MDK-ARM/
 - `PID_Calc` 的 D 项是逐拍差分，没除 dt，增益会随周期变。新写的环用显式速率形式，参考 `LEG_PID_KD_RATE` 和 `LegMotion_Run`。
 
 ### 2.6 倒地 / 自启状态机（`chassis_mode`）
+
+2026-10-10 已将自起启动事件记录加入原工程。排查开启后延迟时，读 [启动追踪说明](projectmd/RECOVERY_START_TRACE_2026-10-10.md)，先看 `recovery_dbg_first_call_delay_ms` 与 `recovery_dbg_reference_delay_ms`；记录锁存，动作结束后可读取。所有字段只用于诊断，控制参数保持当前用户配置。
 
 继续 2026-10-08 自起工作时，先读 [最新工作交接](projectmd/WORK_HANDOFF_2026-10-08_RECOVERY.md)。修改自起阶段、重启、超时或交接时，先读 [倒地自起封装交接](projectmd/LEG_MOTION_HANDOFF.md)；调用单腿动作接口时，读 [LEG_MOTION.md](projectmd/LEG_MOTION.md)。前者记录阶段边界、验证结果和实车续接事项，后者记录命令参数与调用示例。
 

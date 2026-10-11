@@ -110,6 +110,8 @@ extern uint32_t remote_last_rx_tick;
 /* Functions ---------------------------------------------------------------- */
 void SBUS_TO_RC(uint8_t *pData,RC_Ctl_t *RC_CtrlData);
 bool Remote_Is_Offline(void);
+/* Coherent local UART input; false before the first frame or after timeout. */
+bool Remote_GetSnapshot(RC_Ctl_t *snapshot, uint32_t *rx_tick);
 
 
 /* -------------------------------------------------------------------------- */

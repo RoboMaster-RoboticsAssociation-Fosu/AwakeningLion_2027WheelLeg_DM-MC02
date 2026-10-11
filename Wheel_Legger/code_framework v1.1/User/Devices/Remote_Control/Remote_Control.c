@@ -22,6 +22,7 @@
 RC_Ctl_t remote_ctrl;
 
 uint32_t remote_last_rx_tick = 0;
+static volatile uint8_t remote_received;
 
 __attribute__((section (".AXI_SRAM"))) uint8_t SBUS_MultiRx_Buf[2][SBUS_RX_BUF_LEN];
 
@@ -38,7 +39,7 @@ __attribute__((section (".AXI_SRAM"))) uint8_t SBUS_MultiRx_Buf[2][SBUS_RX_BUF_L
  */
 void SBUS_TO_RC(uint8_t *pData,RC_Ctl_t *RC_CtrlData)
 {
-    if(pData == NULL) return;
+    if(pData == NULL || RC_CtrlData == NULL) return;
     
     // 解析4个摇杆通道，每个通道11bit
     RC_CtrlData->rc.ch0 = ((int16_t)pData[0] | ((int16_t)pData[1] << 8)) & 0x07FF;
@@ -68,6 +69,7 @@ void SBUS_TO_RC(uint8_t *pData,RC_Ctl_t *RC_CtrlData)
 	RC_CtrlData->rc.iw -= 1024;
 
     remote_last_rx_tick = HAL_GetTick();
+    remote_received = 1U;
 }
 
 /**
@@ -76,9 +78,34 @@ void SBUS_TO_RC(uint8_t *pData,RC_Ctl_t *RC_CtrlData)
  * @return true: 离线, false: 在线
  * @note   50ms 内未收到新帧即判定离线
  */
+bool Remote_GetSnapshot(RC_Ctl_t *snapshot, uint32_t *rx_tick)
+{
+    uint32_t interrupt_mask;
+    uint32_t now;
+    uint32_t last_rx;
+    uint8_t received;
+    if (snapshot == NULL)
+    {
+        return false;
+    }
+    interrupt_mask = __get_PRIMASK();
+    __disable_irq();
+    now = HAL_GetTick();
+    *snapshot = remote_ctrl;
+    last_rx = remote_last_rx_tick;
+    received = remote_received;
+    __set_PRIMASK(interrupt_mask);
+    if (rx_tick != NULL)
+    {
+        *rx_tick = last_rx;
+    }
+    return received != 0U && (uint32_t)(now - last_rx) < REMOTE_TIMEOUT_MS;
+}
+
 bool Remote_Is_Offline(void)
 {
-    return (HAL_GetTick() - remote_last_rx_tick) >= REMOTE_TIMEOUT_MS;
+    RC_Ctl_t snapshot;
+    return !Remote_GetSnapshot(&snapshot, NULL);
 }
 
 /* Private functions ------------------------------------------------------- */

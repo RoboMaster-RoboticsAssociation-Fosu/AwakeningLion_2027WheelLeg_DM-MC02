@@ -37,8 +37,6 @@ static unsigned int mapping_calls;
 static int bad_mapping;
 
 static uint32_t HAL_GetTick(void) { return clock_ms; }
-static void DM_Enable(void) {}
-static void osDelay(unsigned int delay) { (void)delay; }
 static void LQR(void) {}
 static void LEG_Lenth_Control(void) {}
 static void VMC_calc_2(vmc_leg_t *vmc)
@@ -629,6 +627,77 @@ static void NormalReleaseAndDisable(void)
     CHECK(chassis_recovery.motion[RIGHT_Leg].start_tick == clock_ms);
 }
 
+static void RecoveryStartupTrace(void)
+{
+    CHECK(recovery_dbg_rx_on_seq == 0U);
+    CHECK(recovery_dbg_first_call_delay_ms == UINT32_MAX);
+    CHECK(recovery_dbg_reference_delay_ms == UINT32_MAX);
+    PrepareHandoff();
+    ++clock_ms;
+    falling_to_down();
+    CHECK(Chassis.chassis_mode == NORMAL);
+    for (unsigned int cycle = 0U; cycle < 8U; ++cycle)
+    {
+        Chassis.chassis_enable = OFFLINE;
+        ++clock_ms;
+        falling_down_detect();
+        normal_mode();
+        VMC_translate();
+        SetPhi(LEFT_Leg, 2.81f, SPIN_SCAN_LENGTH);
+        SetPhi(RIGHT_Leg, 2.81f, SPIN_SCAN_LENGTH);
+        /* Model the parsed radio edge; control functions below are actual source. */
+        ++recovery_dbg_rx_on_seq;
+        recovery_dbg_rx_on_tick = clock_ms;
+        recovery_dbg_reference_delay_ms = UINT32_MAX;
+        recovery_dbg_abort_count = 0U;
+        Chassis.chassis_enable = ONLINE;
+        ++clock_ms;
+        uint32_t enabled_tick = clock_ms;
+        falling_down_detect();
+        falling_down();
+        VMC_translate();
+        CHECK(recovery_dbg_enable_tick == enabled_tick);
+        CHECK(recovery_dbg_first_call_tick == enabled_tick);
+        CHECK(recovery_dbg_first_call_delay_ms == 1U);
+        CHECK(recovery_dbg_first_result == CHASSIS_RECOVERY_RUNNING);
+        CHECK(recovery_dbg_first_phase[0] == CHASSIS_RECOVERY_RETRACT);
+        CHECK(recovery_dbg_first_phase[1] == CHASSIS_RECOVERY_RETRACT);
+        NEAR(recovery_dbg_first_phi0[0], 2.81f);
+        NEAR(recovery_dbg_first_phi0[1], 2.81f);
+        CHECK(recovery_dbg_reference_delay_ms == UINT32_MAX);
+        clock_ms += 3U;
+        falling_down();
+        VMC_translate();
+        CHECK(recovery_dbg_reference_delay_ms == 4U);
+        CHECK(recovery_dbg_abort_count == 0U);
+        clock_ms += SPIN_RETRACT_TIME_MS;
+        SetPhi(LEFT_Leg, SPIN_ALIGN_TARGET_PHI0_RAD, SPIN_RETRACT_LENGTH);
+        SetPhi(RIGHT_Leg, SPIN_ALIGN_TARGET_PHI0_RAD, SPIN_RETRACT_LENGTH);
+        falling_down();
+        ++clock_ms;
+        falling_down();
+        clock_ms += SPIN_ALIGN_TIME_MS;
+        falling_down();
+        ++clock_ms;
+        falling_to_down();
+        CHECK(Chassis.chassis_mode == NORMAL);
+        /* Entry records remain readable after the entire action finishes. */
+        CHECK(recovery_dbg_first_call_tick == enabled_tick);
+        CHECK(recovery_dbg_first_call_delay_ms == 1U);
+        CHECK(recovery_dbg_reference_delay_ms == 4U);
+        CHECK(recovery_dbg_first_phase[0] == CHASSIS_RECOVERY_RETRACT);
+        CHECK(recovery_dbg_first_phase[1] == CHASSIS_RECOVERY_RETRACT);
+        NEAR(recovery_dbg_first_phi0[0], 2.81f);
+        NEAR(recovery_dbg_first_phi0[1], 2.81f);
+    }
+    ++clock_ms;
+    chassis_recovery_abort();
+    CHECK(recovery_dbg_abort_count == 1U);
+    CHECK(recovery_dbg_abort_tick == clock_ms);
+    CHECK(chassis_recovery.result == CHASSIS_RECOVERY_IDLE);
+    CHECK(recovery_dbg_first_call_delay_ms == 1U);
+}
+
 int main(void)
 {
     PowerOnAlreadyOnline();
@@ -643,6 +712,7 @@ int main(void)
     HandoffGuards();
     HandoffOutputValidation();
     EnableEdges();
+    RecoveryStartupTrace();
     printf("Recovery integration verification passed (%u assertions).\n", checks);
     return 0;
 }

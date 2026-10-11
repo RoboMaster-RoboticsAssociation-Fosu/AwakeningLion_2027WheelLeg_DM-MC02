@@ -1,0 +1,380 @@
+#include "main.h"
+#include "Remote_Control.h"
+#include "Remote_task.h"
+#include "board_comm_task.h"
+#include "user_sys_config.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+
+Chassis_Info_Typedef Chassis;
+FDCAN_RxHeaderTypeDef RxHeader1, RxHeader3;
+uint8_t g_Can1RxData[64], g_Can3RxData[64];
+volatile uint32_t recovery_dbg_rx_on_tick, recovery_dbg_rx_on_seq;
+volatile uint32_t recovery_dbg_task_on_tick, recovery_dbg_task_on_seq;
+volatile uint32_t recovery_dbg_first_call_delay_ms, recovery_dbg_reference_delay_ms;
+volatile uint32_t recovery_dbg_first_result, recovery_dbg_first_phase[2];
+volatile float recovery_dbg_first_phi0[2];
+volatile uint32_t recovery_dbg_abort_tick, recovery_dbg_abort_count;
+static uint32_t now, interrupt_mask;
+static unsigned int checks, failures, motor_updates;
+typedef struct { FDCAN_RxHeaderTypeDef header; uint8_t data[8]; } Frame;
+static Frame fifo_frames[8];
+static unsigned int fifo_count, fifo_pos, fifo_reads;
+static int fifo_fail;
+#define CHECK(c) do { ++checks; if (!(c)) { ++failures; fprintf(stderr, "REMOTE FAIL line %d: %s\n", __LINE__, #c); } } while (0)
+#define NEAR(a,b) CHECK(fabsf((a) - (b)) < 0.00001f)
+uint32_t HAL_GetTick(void) { return now; }
+uint32_t osKernelSysTick(void) { return now; }
+int osDelayUntil(uint32_t *tick, uint32_t period) { *tick += period; return 0; }
+uint32_t __get_PRIMASK(void) { return interrupt_mask; }
+void __disable_irq(void) { interrupt_mask = 1U; }
+void __set_PRIMASK(uint32_t mask) { interrupt_mask = mask; }
+uint32_t HAL_FDCAN_GetRxFifoFillLevel(FDCAN_HandleTypeDef *handle, uint32_t fifo)
+{ (void)handle; (void)fifo; return fifo_count - fifo_pos; }
+int HAL_FDCAN_GetRxMessage(FDCAN_HandleTypeDef *handle, uint32_t fifo, FDCAN_RxHeaderTypeDef *header, uint8_t *data)
+{
+    (void)handle; (void)fifo; ++fifo_reads;
+    if (fifo_fail) { fifo_fail = 0; return HAL_ERROR; }
+    if (fifo_pos == fifo_count) return HAL_ERROR;
+    *header = fifo_frames[fifo_pos].header;
+    memcpy(data, fifo_frames[fifo_pos++].data, 8);
+    return HAL_OK;
+}
+void DJI_Motor_Info_Update(int *motor, uint8_t *data, uint32_t size)
+{ (void)motor; (void)data; (void)size; ++motor_updates; }
+void DM_Motor_Info_Update(int *motor, uint8_t *data, uint32_t size)
+{ (void)motor; (void)data; (void)size; ++motor_updates; }
+static FDCAN_RxHeaderTypeDef Header(uint32_t id)
+{
+    FDCAN_RxHeaderTypeDef h = { id, FDCAN_STANDARD_ID, FDCAN_DATA_FRAME, FDCAN_DLC_BYTES_8, FDCAN_CLASSIC_CAN };
+    return h;
+}
+static void Put16(uint8_t *data, int16_t value)
+{ uint16_t raw = (uint16_t)value; data[0] = (uint8_t)(raw >> 8); data[1] = (uint8_t)raw; }
+static void Sticks(int16_t ch0, int16_t ch3)
+{
+    uint8_t data[8]; FDCAN_RxHeaderTypeDef h = Header(GIM_TO_CHA_TXID1);
+    Put16(data, ch0); Put16(data + 2, -660); Put16(data + 4, 660); Put16(data + 6, ch3);
+    BoardComm_OnCanRx(&h, data);
+}
+static void Status(uint8_t s1, uint8_t s2, uint8_t lost)
+{
+    uint8_t data[8] = { 0, 0, s1, s2, 0xA5, 0x5A, lost, 250 };
+    FDCAN_RxHeaderTypeDef h = Header(GIM_TO_CHA_TXID2);
+    Put16(data, -321); BoardComm_OnCanRx(&h, data);
+}
+static void Pair(int16_t ch0, int16_t ch3, uint8_t s1, uint8_t s2, uint8_t lost)
+{ Sticks(ch0, ch3); Status(s1, s2, lost); BoardComm_Update(); }
+static void Mouse(void)
+{
+    uint8_t data[8] = { 0x80, 0, 0x7F, 0xFF, 0xFF, 0xFF, 1, 0 };
+    FDCAN_RxHeaderTypeDef h = Header(GIM_TO_CHA_TXID3);
+    BoardComm_OnCanRx(&h, data); BoardComm_Update();
+}
+static void Local(int16_t ch0, int16_t ch3, uint8_t s1, uint8_t s2)
+{
+    uint8_t data[18] = {0}; unsigned int channel, bit;
+    int16_t channels[4] = { ch0, -660, 660, ch3 };
+    for (channel = 0; channel < 4; ++channel) {
+        uint16_t value = (uint16_t)(channels[channel] + 1024);
+        for (bit = 0; bit < 11; ++bit) {
+            unsigned int target = channel * 11 + bit;
+            if ((value >> bit) & 1U) data[target / 8] |= (uint8_t)(1U << (target % 8));
+        }
+    }
+    data[5] |= (uint8_t)((s1 << 6) | (s2 << 4));
+    data[14] = 0x5A; data[17] = 4;
+    SBUS_TO_RC(data, &remote_ctrl);
+}
+static void Both(int16_t ch0, int16_t ch3, uint8_t s1, uint8_t s2)
+{ Local(ch0, ch3, s1, s2); Pair(ch0, ch3, s1, s2, 0); }
+/* Exercise the public interface and ensure mode ownership stays in chassis. */
+static void Step(void)
+{
+    int mode = Chassis.chassis_mode;
+    Remote_ControlStep();
+    CHECK(Chassis.chassis_mode == mode);
+}
+static void Online(void) { CHECK(Chassis.chassis_enable == ONLINE); }
+static void Offline(void)
+{ CHECK(Chassis.chassis_enable == OFFLINE); NEAR(Chassis.set_goal.v_set, 0); NEAR(Chassis.set_goal.yaw_set_v, 0); }
+static void Protocol(void)
+{
+    BoardComm_Remote_t board;
+    CHECK(!BoardComm_GetRemoteSnapshot(&board)); CHECK(Remote_Is_Offline());
+    CHECK(!BoardComm_GetRemoteSnapshot(NULL));
+    now = 12; Sticks(-330, 660); BoardComm_Update(); CHECK(!BoardComm_GetRemoteSnapshot(&board));
+    now = 13; Status(RC_SW_UP, RC_SW_MID, 0); BoardComm_Update();
+    CHECK(BoardComm_GetRemoteSnapshot(&board));
+    CHECK(board.remote.rc.ch0 == -330 && board.remote.rc.ch1 == -660);
+    CHECK(board.remote.rc.ch2 == 660 && board.remote.rc.ch3 == 660);
+    CHECK(board.remote.rc.iw == -321 && board.remote.key.v == 0xA55A);
+    CHECK(board.remote.rc.s1 == RC_SW_UP && board.remote.rc.s2 == RC_SW_MID);
+    CHECK(board.online_cnt == 250 && board.rx_tick[0] == 12 && board.rx_tick[1] == 13);
+    CHECK(remote_ctrl.rc.ch0 == 0 && recovery_dbg_rx_on_seq == 0);
+    Mouse(); CHECK(BoardComm_GetRemoteSnapshot(&board));
+    CHECK(board.remote.mouse.x == INT16_MIN && board.remote.mouse.y == INT16_MAX);
+    CHECK(board.remote.mouse.z == -1 && board.remote.mouse.press_l == 1);
+    {
+        uint8_t data[8] = {0}; FDCAN_RxHeaderTypeDef h = Header(GIM_TO_CHA_TXID1);
+        now = 30; h.DataLength = 7U << 16; BoardComm_OnCanRx(&h, data);
+        h = Header(GIM_TO_CHA_TXID1); h.IdType = FDCAN_EXTENDED_ID; BoardComm_OnCanRx(&h, data);
+        h = Header(GIM_TO_CHA_TXID1); h.RxFrameType = FDCAN_REMOTE_FRAME; BoardComm_OnCanRx(&h, data);
+        h = Header(GIM_TO_CHA_TXID1); h.FDFormat = FDCAN_FD_CAN; BoardComm_OnCanRx(&h, data);
+        h = Header(0x777); BoardComm_OnCanRx(&h, data);
+        BoardComm_OnCanRx(NULL, data); BoardComm_OnCanRx(&h, NULL);
+        BoardComm_Update(); CHECK(BoardComm_GetRemoteSnapshot(&board));
+        CHECK(board.rx_tick[0] == 12 && board.remote.rc.ch0 == -330);
+    }
+}
+static void Mapping(void)
+{
+    static const uint8_t switches[] = {RC_SW_DOWN, RC_SW_MID, RC_SW_UP, 0};
+    static const float lengths[] = {0.159f, 0.20f, 0.25f, 0.159f};
+    unsigned int i;
+    for (i = 0; i < 4; ++i) {
+        now += 2; Both(-330, 660, switches[i], RC_SW_UP); Step(); Online();
+        NEAR(Chassis.set_goal.v_set, 2); NEAR(Chassis.set_goal.yaw_set_v, 1.5f);
+        NEAR(Chassis.set_goal.set_L0_Left, lengths[i]); NEAR(Chassis.set_goal.set_L0_Right, lengths[i]);
+    }
+    CHECK(recovery_dbg_rx_on_seq == 1 && recovery_dbg_rx_on_tick == 2);
+    CHECK(recovery_dbg_task_on_seq == 1 && recovery_dbg_first_result == UINT32_MAX);
+    recovery_dbg_first_call_delay_ms = 123;
+#if CHASSIS_CTRL_SOURCE == CHASSIS_CTRL_SOURCE_LOCAL
+    Pair(660, -660, RC_SW_DOWN, RC_SW_DOWN, 1);
+#else
+    Local(660, -660, RC_SW_DOWN, RC_SW_DOWN);
+#endif
+    Step(); Online(); NEAR(Chassis.set_goal.v_set, 2);
+    CHECK(recovery_dbg_rx_on_seq == 1 && recovery_dbg_first_call_delay_ms == 123);
+    now += 1; Both(660, -660, RC_SW_MID, RC_SW_MID); Step(); Online();
+    NEAR(Chassis.set_goal.v_set, -2); NEAR(Chassis.set_goal.yaw_set_v, -3);
+    Chassis.chassis_mode = FALLING_DOWN; Chassis.set_goal.set_L0_Left = 0.139f;
+    Chassis.set_goal.set_L0_Right = 0.139f;
+    Both(0, 0, RC_SW_UP, RC_SW_MID); Step();
+    NEAR(Chassis.set_goal.set_L0_Left, 0.139f); NEAR(Chassis.set_goal.set_L0_Right, 0.139f);
+    now += 1; Both(0, 0, RC_SW_UP, RC_SW_DOWN); Step(); Offline();
+    now += 1; Both(0, 0, RC_SW_UP, 0); Step(); Offline();
+#if CHASSIS_CTRL_SOURCE == CHASSIS_CTRL_SOURCE_GIMBAL
+    Pair(0, 0, RC_SW_UP, 7, 0); Step(); Offline();
+#endif
+}
+static void Timeout(void)
+{
+    Both(330, -660, RC_SW_UP, RC_SW_UP); Step(); Online();
+    now = 49; Mouse(); Step(); Online();
+    now = 50; Step(); Offline(); CHECK(Remote_Is_Offline());
+    now = 51; Both(330, -660, RC_SW_UP, RC_SW_UP); Step();
+#if CHASSIS_CTRL_SOURCE == CHASSIS_CTRL_SOURCE_GIMBAL
+    Offline(); CHECK(remote_gimbal_rearm_required == 1);
+    now = 52; Pair(0, 0, RC_SW_UP, 0, 0); Step(); Offline();
+    CHECK(remote_gimbal_rearm_required == 1);
+    now = 53; Pair(0, 0, RC_SW_UP, RC_SW_DOWN, 1); Step(); Offline();
+    CHECK(remote_gimbal_rearm_required == 1);
+    now = 54; Pair(0, 0, RC_SW_UP, RC_SW_DOWN, 0); Step(); Offline();
+    CHECK(remote_gimbal_rearm_required == 0);
+    now = 55; Pair(330, -660, RC_SW_UP, RC_SW_UP, 0); Step(); Online();
+    CHECK(recovery_dbg_rx_on_tick == 55);
+#else
+    Online(); CHECK(remote_gimbal_rearm_required == 0); CHECK(recovery_dbg_rx_on_tick == 51);
+#endif
+    CHECK(recovery_dbg_rx_on_seq == 2 && recovery_dbg_task_on_seq == 2);
+}
+static void Missing(int sticks_missing)
+{
+    BoardComm_Remote_t board;
+    Both(0, 660, RC_SW_UP, RC_SW_UP); Step(); Online();
+    now = 49;
+    if (sticks_missing) Status(RC_SW_UP, RC_SW_UP, 0); else Sticks(0, 660);
+    BoardComm_Update(); CHECK(BoardComm_GetRemoteSnapshot(&board));
+    now = 50; CHECK(!BoardComm_GetRemoteSnapshot(&board)); Step(); Offline();
+    now = 51; Both(0, 660, RC_SW_UP, RC_SW_UP); Step();
+#if CHASSIS_CTRL_SOURCE == CHASSIS_CTRL_SOURCE_GIMBAL
+    Offline(); CHECK(remote_gimbal_rearm_required == 1);
+#else
+    Online();
+#endif
+}
+static void Lost(void)
+{
+    Both(0, 660, RC_SW_UP, RC_SW_UP); Step(); Online();
+    now = 10; Pair(0, 660, RC_SW_UP, RC_SW_UP, 1);
+    { BoardComm_Remote_t b; CHECK(!BoardComm_GetRemoteSnapshot(&b)); CHECK(b.loss_seq == 1); }
+    /* No control step between loss and recovery: the event must survive. */
+    now = 11; Pair(0, 660, RC_SW_UP, RC_SW_UP, 0); Step();
+#if CHASSIS_CTRL_SOURCE == CHASSIS_CTRL_SOURCE_GIMBAL
+    Offline(); CHECK(remote_gimbal_rearm_required == 1);
+    now = 12; Pair(0, 0, RC_SW_DOWN, RC_SW_DOWN, 0); Step(); Offline();
+    now = 13; Pair(0, 660, RC_SW_UP, RC_SW_UP, 0); Step(); Online();
+    CHECK(recovery_dbg_rx_on_seq == 2);
+#else
+    Online(); CHECK(recovery_dbg_rx_on_seq == 1);
+#endif
+}
+static void Burst(void)
+{
+    BoardComm_Remote_t board;
+    Both(0, 660, RC_SW_UP, RC_SW_UP); Step(); Online();
+    now = 1; Status(RC_SW_UP, RC_SW_UP, 1);
+    now = 2; Status(RC_SW_UP, RC_SW_UP, 0);
+    BoardComm_Update(); CHECK(BoardComm_GetRemoteSnapshot(&board)); CHECK(board.loss_seq == 1);
+    Step();
+#if CHASSIS_CTRL_SOURCE == CHASSIS_CTRL_SOURCE_GIMBAL
+    Offline(); CHECK(remote_gimbal_rearm_required == 1);
+#else
+    Online();
+#endif
+}
+static void Overflow(void)
+{
+    unsigned int i; BoardComm_Remote_t board;
+    Both(0, 660, RC_SW_UP, RC_SW_UP); Step(); Online();
+    now = 1; for (i = 0; i < 10; ++i) Status(RC_SW_UP, RC_SW_UP, 0);
+    CHECK(board_comm_rx_overruns == 3);
+    BoardComm_Update(); CHECK(!BoardComm_GetRemoteSnapshot(&board));
+    CHECK(board.received_mask == 0 && board.loss_seq == 1); Step();
+#if CHASSIS_CTRL_SOURCE == CHASSIS_CTRL_SOURCE_GIMBAL
+    Offline(); CHECK(remote_gimbal_rearm_required == 1);
+#else
+    Online();
+#endif
+    now = 2; Both(0, 660, RC_SW_UP, RC_SW_UP); Step();
+#if CHASSIS_CTRL_SOURCE == CHASSIS_CTRL_SOURCE_GIMBAL
+    Offline();
+    now = 3; Pair(0, 0, RC_SW_DOWN, RC_SW_DOWN, 0); Step(); Offline();
+    now = 4; Pair(0, 660, RC_SW_UP, RC_SW_UP, 0); Step(); Online();
+#else
+    Online();
+#endif
+}
+static void StartupStatus(void)
+{
+    BoardComm_Remote_t board;
+    Status(RC_SW_UP, RC_SW_UP, 0); BoardComm_Update();
+    CHECK(!BoardComm_GetRemoteSnapshot(&board)); Step(); Offline();
+    now = 50; Sticks(0, 660); BoardComm_Update();
+    CHECK(!BoardComm_GetRemoteSnapshot(&board)); Step(); Offline();
+    now = 51; Status(RC_SW_UP, RC_SW_UP, 0); BoardComm_Update();
+    CHECK(BoardComm_GetRemoteSnapshot(&board)); Step();
+#if CHASSIS_CTRL_SOURCE == CHASSIS_CTRL_SOURCE_GIMBAL
+    Online(); CHECK(remote_gimbal_rearm_required == 0); CHECK(recovery_dbg_rx_on_seq == 1);
+#else
+    Offline();
+#endif
+}
+static void Wrap(void)
+{
+    now = UINT32_MAX - 20U; Both(0, 660, RC_SW_UP, RC_SW_UP); Step(); Online();
+    now = 28; Step(); Online(); CHECK(!Remote_Is_Offline());
+    now = 29; Step(); Offline(); CHECK(Remote_Is_Offline());
+}
+static void Fifo(void)
+{
+    FDCAN_HandleTypeDef can3 = {FDCAN3}, can1 = {FDCAN1};
+    BoardComm_Remote_t board;
+    fifo_frames[0].header = Header(GIM_TO_CHA_TXID1);
+    fifo_frames[0].header.DataLength = 7U << 16;
+    fifo_frames[1].header = Header(GIM_TO_CHA_TXID1); Put16(fifo_frames[1].data + 6, 660);
+    fifo_frames[2].header = Header(GIM_TO_CHA_TXID2);
+    fifo_frames[2].data[2] = RC_SW_UP; fifo_frames[2].data[3] = RC_SW_UP;
+    fifo_count = 3; Chassis.set_goal.v_set = 7;
+    HAL_FDCAN_RxFifo0Callback(&can3, 0); CHECK(fifo_reads == 0);
+    fifo_fail = 1; HAL_FDCAN_RxFifo0Callback(&can3, FDCAN_IT_RX_FIFO0_NEW_MESSAGE);
+    CHECK(fifo_reads == 1 && fifo_pos == 0);
+    HAL_FDCAN_RxFifo0Callback(&can3, FDCAN_IT_RX_FIFO0_NEW_MESSAGE);
+    CHECK(fifo_reads == 4 && fifo_pos == 3); NEAR(Chassis.set_goal.v_set, 7);
+    CHECK(!BoardComm_GetRemoteSnapshot(&board)); BoardComm_Update();
+    CHECK(BoardComm_GetRemoteSnapshot(&board)); CHECK(board.remote.rc.ch3 == 660);
+    NEAR(Chassis.set_goal.v_set, 7);
+    Step();
+#if CHASSIS_CTRL_SOURCE == CHASSIS_CTRL_SOURCE_GIMBAL
+    Online(); NEAR(Chassis.set_goal.v_set, 2);
+#else
+    Offline();
+#endif
+    fifo_pos = 0; fifo_count = 1; fifo_frames[0].header = Header(0x201);
+    HAL_FDCAN_RxFifo0Callback(&can1, FDCAN_IT_RX_FIFO0_NEW_MESSAGE);
+    CHECK(motor_updates == 1);
+}
+static void Stream(void)
+{
+    for (now = 0; now < 500; ++now) {
+        Both(-660, 660, RC_SW_MID, RC_SW_MID); Step(); Online();
+        CHECK(remote_gimbal_rearm_required == 0); NEAR(Chassis.set_goal.yaw_set_v, 3);
+    }
+    CHECK(recovery_dbg_rx_on_seq == 1);
+    /* The timeout must be retained even if fresh raw mailboxes already exist. */
+    now = 549; Both(0, 660, RC_SW_UP, RC_SW_UP); Step();
+#if CHASSIS_CTRL_SOURCE == CHASSIS_CTRL_SOURCE_GIMBAL
+    Offline(); CHECK(remote_gimbal_rearm_required == 1);
+#else
+    Online();
+#endif
+}
+static void Snapshot(void)
+{
+    RC_Ctl_t input; BoardComm_Remote_t board; uint32_t stamp = 99;
+    CHECK(!Remote_GetSnapshot(&input, &stamp)); CHECK(stamp == 0);
+    CHECK(!Remote_GetSnapshot(NULL, &stamp)); SBUS_TO_RC(NULL, &remote_ctrl);
+    { uint8_t data[18] = {0}; SBUS_TO_RC(data, NULL); }
+    CHECK(Remote_Is_Offline()); now = 4; Both(-123, 456, RC_SW_MID, RC_SW_UP);
+    interrupt_mask = 1;
+    CHECK(Remote_GetSnapshot(&input, &stamp)); CHECK(interrupt_mask == 1);
+    CHECK(stamp == 4 && input.rc.ch0 == -123 && input.rc.ch3 == 456);
+    CHECK(BoardComm_GetRemoteSnapshot(&board)); CHECK(interrupt_mask == 1);
+    BoardComm_Update(); CHECK(interrupt_mask == 1); interrupt_mask = 0;
+    Step(); Online(); CHECK(recovery_dbg_rx_on_tick == 4);
+}
+static void LegLength(void)
+{
+    static const int modes[] = {ZERO_FORCE, FALLING_DOWN, FALLING_TO_NORMAL, NORMAL};
+    unsigned int i;
+    for (i = 0; i < sizeof(modes) / sizeof(modes[0]); ++i) {
+        ++now; Chassis.chassis_mode = modes[i];
+        Chassis.set_goal.set_L0_Left = 0.18f; Chassis.set_goal.set_L0_Right = 0.22f;
+        Both(0, 0, RC_SW_UP, RC_SW_UP); Step(); Online();
+        if (modes[i] == NORMAL) {
+            NEAR(Chassis.set_goal.set_L0_Left, 0.25f); NEAR(Chassis.set_goal.set_L0_Right, 0.25f);
+        } else {
+            NEAR(Chassis.set_goal.set_L0_Left, 0.18f); NEAR(Chassis.set_goal.set_L0_Right, 0.22f);
+        }
+    }
+    ++now; Both(0, 0, 7, RC_SW_UP);
+    /* DBUS switches are only two bits; inject a corrupt field defensively. */
+    remote_ctrl.rc.s1 = 7;
+    Chassis.set_goal.set_L0_Left = 0.18f; Chassis.set_goal.set_L0_Right = 0.22f;
+    Step(); Online();
+    NEAR(Chassis.set_goal.set_L0_Left, 0.18f); NEAR(Chassis.set_goal.set_L0_Right, 0.22f);
+    ++now; Both(0, 0, RC_SW_DOWN, RC_SW_DOWN); Step(); Offline();
+    /* A valid NORMAL sample still selects leg length while disabled. */
+    NEAR(Chassis.set_goal.set_L0_Left, 0.159f); NEAR(Chassis.set_goal.set_L0_Right, 0.159f);
+    ++now; Chassis.chassis_mode = FALLING_DOWN; Both(0, 0, RC_SW_UP, RC_SW_UP); Step();
+    Chassis.set_goal.set_L0_Left = 0.18f; Chassis.set_goal.set_L0_Right = 0.22f;
+    now += REMOTE_TIMEOUT_MS; Chassis.chassis_mode = NORMAL; Step(); Offline();
+    NEAR(Chassis.set_goal.set_L0_Left, 0.18f); NEAR(Chassis.set_goal.set_L0_Right, 0.22f);
+}
+int main(int argc, char **argv)
+{
+    if (argc != 2) return 2;
+    Chassis.chassis_mode = NORMAL;
+    if (!strcmp(argv[1], "protocol")) Protocol();
+    else if (!strcmp(argv[1], "mapping")) Mapping();
+    else if (!strcmp(argv[1], "timeout")) Timeout();
+    else if (!strcmp(argv[1], "missing_sticks")) Missing(1);
+    else if (!strcmp(argv[1], "missing_status")) Missing(0);
+    else if (!strcmp(argv[1], "lost")) Lost();
+    else if (!strcmp(argv[1], "burst")) Burst();
+    else if (!strcmp(argv[1], "overflow")) Overflow();
+    else if (!strcmp(argv[1], "startup_status")) StartupStatus();
+    else if (!strcmp(argv[1], "wrap")) Wrap();
+    else if (!strcmp(argv[1], "fifo")) Fifo();
+    else if (!strcmp(argv[1], "stream")) Stream();
+    else if (!strcmp(argv[1], "snapshot")) Snapshot();
+    else if (!strcmp(argv[1], "leg_length")) LegLength();
+    else return 2;
+    CHECK(interrupt_mask == 0);
+    printf("remote source %d %-14s: %u checks, %u failures\n", CHASSIS_CTRL_SOURCE, argv[1], checks, failures);
+    return failures ? 1 : 0;
+}

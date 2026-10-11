@@ -51,6 +51,10 @@ float fb_dt;
 static ramp_function_source_t leg_length_ramp[2];
 static uint8_t leg_length_ramp_initialized;
 
+/* Written only by the CAN RX callbacks; no feedback means offline. */
+static volatile uint32_t motor_feedback_tick[CHASSIS_MOTOR_COUNT];
+static volatile uint8_t motor_feedback_seen[CHASSIS_MOTOR_COUNT];
+
 /* ---- 周期分段计时（临时插桩，用于定位 fb_dt = 6 ms 的去向）----
    t_sum 是任务自身的执行时间。若 t_sum 远小于 fb_dt，说明是被高优先级
    任务抢占，而不是自己慢。定位完可整段删除。 */
@@ -58,6 +62,23 @@ float t_fb, t_mode, t_leso, t_can, t_sum;
 
 /* 自起阶段和两腿动作统一保存，可在调试器中观察。 */
 ChassisRecovery_Context chassis_recovery;
+
+/* Startup event trace; values stay latched until the next received OFF-to-ON. */
+volatile uint32_t recovery_dbg_rx_on_tick;
+volatile uint32_t recovery_dbg_rx_on_seq;
+volatile uint32_t recovery_dbg_task_on_tick;
+volatile uint32_t recovery_dbg_task_on_seq;
+volatile uint32_t recovery_dbg_enable_tick;
+volatile uint32_t recovery_dbg_first_call_tick;
+volatile uint32_t recovery_dbg_first_call_delay_ms = UINT32_MAX;
+volatile uint32_t recovery_dbg_reference_delay_ms = UINT32_MAX;
+volatile uint32_t recovery_dbg_first_call_seq;
+volatile uint32_t recovery_dbg_first_result = UINT32_MAX;
+volatile uint32_t recovery_dbg_first_phase[2] = {UINT32_MAX, UINT32_MAX};
+volatile float recovery_dbg_first_phi0[2];
+volatile uint32_t recovery_dbg_abort_tick = UINT32_MAX;
+volatile uint32_t recovery_dbg_abort_count;
+
 static uint8_t recovery_output_pending;
 
 extern INS_t INS;
@@ -251,7 +272,7 @@ static void Chassis_init(void)
 	VMC_init(&Chassis.leg_situation[RIGHT_Leg].vmc);
 //	Compensate_PID_Init();
 	Chassis.chassis_enable = OFFLINE;
-	Chassis.chassis_mode = NORMAL;
+	Chassis.chassis_mode = ZERO_FORCE;
 	Chassis.set_goal.roll_set = 0.0f;
 }
 
@@ -361,9 +382,83 @@ void VMC_translate(void)
     }
 }
 
+void Chassis_MotorFeedbackReceived(Chassis_MotorFeedback_e motor)
+{
+    if ((unsigned int)motor >= CHASSIS_MOTOR_COUNT)
+    {
+        return;
+    }
+    motor_feedback_tick[motor] = HAL_GetTick();
+    motor_feedback_seen[motor] = 1U;
+}
+
+static void chassis_joint_enable_check(void)
+{
+    static uint8_t enable_requested;
+    /* IDs follow the first four motor feedback slots. */
+    const uint8_t joint_id[4] = {LEFT_FRONT_id, LEFT_BACK_id, RIGHT_FRONT_id, RIGHT_BACK_id};
+    uint32_t primask = __get_PRIMASK();
+    uint32_t now;
+    uint8_t joint;
+    uint8_t any_disabled = 0U;
+    uint8_t all_enabled = 1U;
+
+    __disable_irq();
+    now = HAL_GetTick();
+    for (joint = 0U; joint < 4U; ++joint)
+    {
+        if (motor_feedback_seen[joint] == 0U ||
+            (uint32_t)(now - motor_feedback_tick[joint]) >= CHASSIS_MOTOR_FEEDBACK_TIMEOUT_MS)
+        {
+            all_enabled = 0U;
+        }
+        else if (Chassis.Joint_Motor[joint_id[joint]].Data.state != 1U)
+        {
+            any_disabled = 1U;
+            all_enabled = 0U;
+        }
+    }
+    __set_PRIMASK(primask);
+
+    if (all_enabled != 0U)
+    {
+        enable_requested = 0U;
+    }
+    if (any_disabled != 0U && enable_requested == 0U)
+    {
+        enable_requested = 1U;
+        DM_Enable();
+    }
+}
+
+static void chassis_motor_online_update(void)
+{
+    uint32_t primask = __get_PRIMASK();
+    uint32_t now;
+    uint8_t motor;
+    uint8_t all_online = 1U;
+
+    /* Sample time and feedback together so RX cannot race the timeout check. */
+    __disable_irq();
+    now = HAL_GetTick();
+    for (motor = 0U; motor < CHASSIS_MOTOR_COUNT; ++motor)
+    {
+        if (motor_feedback_seen[motor] == 0U ||
+            (uint32_t)(now - motor_feedback_tick[motor]) >= CHASSIS_MOTOR_FEEDBACK_TIMEOUT_MS)
+        {
+            all_online = 0U;
+            break;
+        }
+    }
+    __set_PRIMASK(primask);
+    Chassis.all_motors_online = all_online;
+}
+
 void Chassis_CanTransimit(void)
 {
-	if(Chassis.chassis_enable == ONLINE)
+    chassis_joint_enable_check();
+    chassis_motor_online_update();
+	if(Chassis.chassis_enable == ONLINE && Chassis.all_motors_online)
 	{
 		
         /* 先限幅轮力矩，再转 int16_t 电流，避免越界后反向。 */
@@ -476,6 +571,7 @@ void falling_down_detect(void)
     if (Chassis.chassis_enable == ONLINE && last_enable == OFFLINE)
     {
         last_enable = ONLINE;
+        recovery_dbg_enable_tick = HAL_GetTick();
         chassis_recovery_reset();
         /* Every enable edge completes recovery before NORMAL takes over. */
         Chassis.chassis_mode = FALLING_DOWN;
@@ -523,6 +619,8 @@ static void chassis_recovery_reset(void)
 
 static void chassis_recovery_abort(void)
 {
+    recovery_dbg_abort_tick = HAL_GetTick();
+    ++recovery_dbg_abort_count;
     Chassis.chassis_mode = ZERO_FORCE;
     chassis_zero_outputs();
     chassis_recovery_reset();
@@ -531,14 +629,6 @@ static void chassis_recovery_abort(void)
 void zero_force(void)
 {
     chassis_zero_outputs();
-    if (Chassis.Joint_Motor[LEFT_FRONT_id].Data.state != 1 ||
-        Chassis.Joint_Motor[RIGHT_FRONT_id].Data.state != 1 ||
-        Chassis.Joint_Motor[RIGHT_BACK_id].Data.state != 1 ||
-        Chassis.Joint_Motor[LEFT_BACK_id].Data.state != 1)
-    {
-        DM_Enable();
-        osDelay(1);
-    }
     chassis_recovery_reset();
 }
 
@@ -554,6 +644,9 @@ static void chassis_recovery_control(void)
     ChassisRecovery_Input input;
     ChassisRecovery_Output output;
     ChassisRecovery_Result result;
+    uint32_t recovery_dbg_now;
+    uint32_t recovery_dbg_seq;
+    uint8_t recovery_dbg_capture;
 
     input.enabled = (Chassis.chassis_enable == ONLINE);
     input.pitch_rad = Chassis.body_state.theta;
@@ -566,7 +659,35 @@ static void chassis_recovery_control(void)
     input.leg[CHASSIS_RECOVERY_RIGHT].length_m = Chassis.leg_situation[RIGHT_Leg].vmc.L0;
     input.leg[CHASSIS_RECOVERY_RIGHT].length_velocity_m_s = Chassis.leg_situation[RIGHT_Leg].vmc.d_L0;
 
-    result = ChassisRecovery_Run(&chassis_recovery, &input, HAL_GetTick(), &output);
+    recovery_dbg_now = HAL_GetTick();
+    recovery_dbg_seq = recovery_dbg_rx_on_seq;
+    recovery_dbg_capture = input.enabled != 0U && recovery_dbg_first_call_seq != recovery_dbg_seq;
+    if (recovery_dbg_capture != 0U)
+    {
+        recovery_dbg_first_call_tick = recovery_dbg_now;
+        recovery_dbg_first_phi0[0] = input.leg[0].phi0_rad;
+        recovery_dbg_first_phi0[1] = input.leg[1].phi0_rad;
+    }
+    result = ChassisRecovery_Run(&chassis_recovery, &input, recovery_dbg_now, &output);
+    if (recovery_dbg_capture != 0U)
+    {
+        recovery_dbg_first_call_delay_ms = recovery_dbg_now - recovery_dbg_rx_on_tick;
+        recovery_dbg_first_result = (uint32_t)result;
+        recovery_dbg_first_phase[0] = (uint32_t)chassis_recovery.phase[0];
+        recovery_dbg_first_phase[1] = (uint32_t)chassis_recovery.phase[1];
+        recovery_dbg_first_call_seq = recovery_dbg_seq;
+    }
+    if (input.enabled != 0U && result == CHASSIS_RECOVERY_RUNNING &&
+        recovery_dbg_reference_delay_ms == UINT32_MAX &&
+        recovery_dbg_rx_on_seq != 0U &&
+        recovery_dbg_first_call_seq == recovery_dbg_rx_on_seq &&
+        chassis_recovery.phase[0] == CHASSIS_RECOVERY_RETRACT &&
+        chassis_recovery.phase[1] == CHASSIS_RECOVERY_RETRACT &&
+        chassis_recovery.motion[0].reference_length_m < chassis_recovery.motion[0].start_length_m - 0.002f &&
+        chassis_recovery.motion[1].reference_length_m < chassis_recovery.motion[1].start_length_m - 0.002f)
+    {
+        recovery_dbg_reference_delay_ms = recovery_dbg_now - recovery_dbg_rx_on_tick;
+    }
     switch (result)
     {
         case CHASSIS_RECOVERY_IDLE:

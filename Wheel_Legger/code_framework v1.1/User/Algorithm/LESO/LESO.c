@@ -293,7 +293,7 @@ float LP[140][6] =
 };
 
 /* Independent injection scales for wheel / hip comparison; observer always runs. */
-volatile float leso_wheel_scale = 0.0f;
+volatile float leso_wheel_scale = 0.2f;
 volatile uint8_t leso_wheel_mode = 3; /* 0:关闭轮补偿，1:仅共同补偿，2:仅差动补偿，3:完整轮补偿 */
 volatile float leso_leg_scale = 1.0f;
 const float leso_dlim[4] = {2.0f, 2.0f, 7.0f, 7.0f};

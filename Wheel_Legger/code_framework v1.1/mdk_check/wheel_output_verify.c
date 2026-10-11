@@ -16,11 +16,13 @@
 enum { OFFLINE, ONLINE };
 enum { LEFT_Leg, RIGHT_Leg };
 typedef struct { float Yaw; } INS_t;
+typedef struct { struct { uint16_t state; } Data; } JointMotorStub;
 typedef struct
 {
     int chassis_enable;
+    uint8_t all_motors_online;
     DJI_Motor_Info_Typedef Wheel_Motor[4];
-    int Joint_Motor[4];
+    JointMotorStub Joint_Motor[4];
     struct { struct { float L0, theta, d_theta, Tp, torque_set[2]; } vmc; } leg_situation[2];
     struct { float x, Estimate_dx, d_yaw, theta, d_theta; } body_state;
     struct { float v_set, yaw_set, yaw_set_v; } set_goal;
@@ -40,7 +42,7 @@ static void canx_send_data(hcan_t *can, uint32_t id, uint8_t *data, uint32_t siz
     frame_id = id;
     ++sends;
 }
-static void DM_Motor_Ctrl(hcan_t *can, int *motor, float pos, float vel,
+static void DM_Motor_Ctrl(hcan_t *can, JointMotorStub *motor, float pos, float vel,
                           float kp, float kd, float torque, uint16_t delay)
 {
     (void)can; (void)motor; (void)pos; (void)vel;
@@ -51,6 +53,16 @@ static void LESO_Feedback(float left, float right, float left_tp, float right_tp
     feedback[0] = left; feedback[1] = right;
     feedback[2] = left_tp; feedback[3] = right_tp;
 }
+#ifdef WHEEL_OUTPUT_HAS_MOTOR_GUARD
+static uint32_t interrupt_mask;
+static uint32_t HAL_GetTick(void) { return 0U; }
+static uint32_t __get_PRIMASK(void) { return interrupt_mask; }
+static void __disable_irq(void) { interrupt_mask = 1U; }
+static void __set_PRIMASK(uint32_t mask) { interrupt_mask = mask; }
+#endif
+#ifdef WHEEL_OUTPUT_HAS_JOINT_ENABLE
+static void DM_Enable(void) {}
+#endif
 #include "wheel_implementation.inc"
 
 #define CHECK(condition) do { ++checks; if (!(condition)) { \
@@ -73,6 +85,14 @@ static void CheckOutput(float left, float right, int enabled)
     Chassis.Wheel_Motor[LEFT_Wheel].wheel_T = left;
     Chassis.Wheel_Motor[RIGHT_Wheel].wheel_T = right;
     sends = 0;
+#ifdef WHEEL_OUTPUT_HAS_MOTOR_GUARD
+    {
+        unsigned int motor;
+        for (motor = 0; motor < 4; ++motor) Chassis.Joint_Motor[motor].Data.state = 1;
+        for (motor = 0; motor < CHASSIS_MOTOR_COUNT; ++motor)
+            Chassis_MotorFeedbackReceived((Chassis_MotorFeedback_e)motor);
+    }
+#endif
     Chassis_CanTransimit();
     printf("request=(%+.4f,%+.4f) current=(%d,%d) expected=(%d,%d) online=%d\n",
            left, right, SentCurrent(LEFT_Wheel), SentCurrent(RIGHT_Wheel), expected_left, expected_right, enabled);

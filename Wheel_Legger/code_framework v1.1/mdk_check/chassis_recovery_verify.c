@@ -1,6 +1,7 @@
 /* Replay feedback through the actual recovery API and portable controllers. */
 #include "chassis_recovery.h"
 
+#include <float.h>
 #include <math.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -109,8 +110,12 @@ static void SweepTargetTrajectory(void)
         }
         else
         {
-            NEAR(output.leg[0].Tp, LEG_MOTION_LEG_WEIGHT_N * input.leg[0].length_m * 0.5f *
-                                   sinf(input.leg[0].phi0_rad - LEG_MOTION_PI * 0.5f));
+            float gravity_torque = LEG_MOTION_LEG_WEIGHT_N * input.leg[0].length_m * 0.5f *
+                                   sinf(input.leg[0].phi0_rad - LEG_MOTION_PI * 0.5f);
+            /* Float unwrapping roundoff is amplified by the configured angle gain. */
+            float roundoff = LEG_MOTION_ANGLE_KP * FLT_EPSILON * (float)(step + 4U) *
+                             (1.0f + fabsf(angle));
+            CHECK(fabsf(output.leg[0].Tp - gravity_torque) < 0.0001f + roundoff);
         }
         NEAR(output.leg[0].F0, -LEG_MOTION_LOWER_LEG_WEIGHT_N *
                                cosf(input.leg[0].phi0_rad - LEG_MOTION_PI * 0.5f));

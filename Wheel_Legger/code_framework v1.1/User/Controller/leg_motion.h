@@ -8,7 +8,7 @@
 #define LEG_MOTION_RAD_TO_DEG (180.0f / LEG_MOTION_PI) /* 弧度转角度的换算系数 */
 
 /* Rate-form PD gains; F0 is a force in N, Tp is a torque in N*m. */
-#define LEG_MOTION_ANGLE_KP 200.0f /* 摆腿角度比例增益，用角度误差计算虚拟摆腿力矩 */
+#define LEG_MOTION_ANGLE_KP 300.0f /* 摆腿角度比例增益，用角度误差计算虚拟摆腿力矩 */
 #define LEG_MOTION_ANGLE_KD 2.0f /* 摆腿角速度阻尼增益，用反馈角速度抑制摆动 */
 #define LEG_MOTION_LENGTH_KP 2000.0f /* 腿长比例增益，用长度误差计算虚拟伸缩力 */
 #define LEG_MOTION_LENGTH_KD 100.0f /* 腿长变化率阻尼增益，用反馈伸缩速度抑制振荡 */

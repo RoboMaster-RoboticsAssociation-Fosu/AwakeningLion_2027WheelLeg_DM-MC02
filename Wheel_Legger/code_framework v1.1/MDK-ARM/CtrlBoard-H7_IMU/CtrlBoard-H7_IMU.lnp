@@ -73,6 +73,7 @@
 "ctrlboard-h7_imu\chassis_task.o"
 "ctrlboard-h7_imu\ps2_task.o"
 "ctrlboard-h7_imu\remote_task.o"
+"ctrlboard-h7_imu\board_comm_task.o"
 "ctrlboard-h7_imu\bsp_dwt.o"
 "ctrlboard-h7_imu\bsp_pwm.o"
 "ctrlboard-h7_imu\bsp_uart.o"

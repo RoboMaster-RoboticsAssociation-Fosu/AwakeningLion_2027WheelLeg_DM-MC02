@@ -127,15 +127,18 @@ static void CheckTransitions(void)
     }
     Start(0.15f, 0.15f, 0.25f);
     for (tick = 0; tick < 500; ++tick) Step(0.001f, 0.001f);
-    NEAR(leg_length_ramp[0].out, 0.20f, 0.00001f);
+    NEAR(leg_length_ramp[0].out, fminf(0.25f, 0.15f + LEG_LENGTH_RAMP_RATE_M_S * 0.5f), 0.00001f);
     for (tick = 0; tick < 500; ++tick) Step(0.001f, 0.001f);
-    NEAR(leg_length_ramp[0].out, 0.25f, 0.00001f);
+    NEAR(leg_length_ramp[0].out, fminf(0.25f, 0.15f + LEG_LENGTH_RAMP_RATE_M_S), 0.00001f);
 
     Start(0.15f, 0.15f, 0.25f);
     for (tick = 0; tick < 300; ++tick) Step(0.001f, 0.001f);
     Chassis.set_goal.set_L0_Left = 0.15f;
     Chassis.set_goal.set_L0_Right = 0.20f;
-    for (tick = 0; tick < 400; ++tick) Step(0.001f, 0.001f);
+    unsigned int retarget_ticks = (unsigned int)ceilf(fmaxf(fabsf(leg_length_ramp[0].out - 0.15f),
+                                 fabsf(leg_length_ramp[1].out - 0.20f)) /
+                                 (LEG_LENGTH_RAMP_RATE_M_S * 0.001f)) + 2U;
+    for (tick = 0; tick < retarget_ticks; ++tick) Step(0.001f, 0.001f);
     CHECK(leg_length_ramp[0].out == 0.15f);
     CHECK(leg_length_ramp[1].out == 0.20f);
 }
@@ -150,12 +153,13 @@ static void CheckTimingAndEntry(void)
     CHECK(leg_length_ramp[0].out < 0.15f);
     CHECK(leg_length_ramp[1].out > 0.25f);
     for (tick = 0; tick < 100; ++tick) Step(tick % 2 ? 0.006f : 0.001f, tick % 2 ? 0.006f : 0.001f);
-    NEAR(leg_length_ramp[0].out, 0.1741f, 0.00001f);
+    NEAR(leg_length_ramp[0].out, fminf(0.20f, 0.139f + LEG_LENGTH_RAMP_RATE_M_S * 0.351f), 0.00001f);
     for (tick = 0; tick < sizeof(invalid_dt) / sizeof(invalid_dt[0]); ++tick)
     {
         previous = leg_length_ramp[0].out;
         Step(invalid_dt[tick], 0.001f);
-        NEAR(leg_length_ramp[0].out - previous, 0.0001f, 0.00000004f);
+        NEAR(leg_length_ramp[0].out - previous, fminf(LEG_LENGTH_RAMP_RATE_M_S * 0.001f,
+             fmaxf(0.0f, 0.20f - previous)), 0.00000004f);
     }
 
     Chassis.chassis_enable = OFFLINE;

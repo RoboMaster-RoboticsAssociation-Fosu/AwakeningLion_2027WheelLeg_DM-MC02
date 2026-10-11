@@ -16,6 +16,7 @@
 #include "fdcan.h"
 #include "string.h"
 #include "chassis_task.h"
+#include "board_comm_task.h"
 
 /* Defines ----------------------------------------------------------------- */
 
@@ -216,16 +217,33 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
     {
 		/* 从RX_FIFO0检索Rx消息 */
 		memset(g_Can1RxData, 0, sizeof(g_Can1RxData));	//清空接收缓冲区	
-		HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &RxHeader1, g_Can1RxData);
+        if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &RxHeader1, g_Can1RxData) != HAL_OK ||
+            RxHeader1.IdType != FDCAN_STANDARD_ID || RxHeader1.RxFrameType != FDCAN_DATA_FRAME ||
+            RxHeader1.FDFormat != FDCAN_CLASSIC_CAN || RxHeader1.DataLength != FDCAN_DLC_BYTES_8)
+        {
+            return;
+        }
 			
 		switch(RxHeader1.Identifier)
 		{
 			
 			
-			case Chassis_3508_Motor1_RxID			:DJI_Motor_Info_Update(&Chassis.Wheel_Motor[RIGHT_Wheel],g_Can1RxData,RxHeader1.DataLength);break;
-			case Chassis_3508_Motor2_RxID			:DJI_Motor_Info_Update(&Chassis.Wheel_Motor[LEFT_Wheel],g_Can1RxData,RxHeader1.DataLength);break;
-			case JOINT_DM_RIGHT_FRONT_RxID_Set	:DM_Motor_Info_Update(&Chassis.Joint_Motor[RIGHT_FRONT_id],g_Can1RxData,RxHeader1.DataLength);break;
-			case JOINT_DM_RIGHT_BACK_RxID_Set	:DM_Motor_Info_Update(&Chassis.Joint_Motor[RIGHT_BACK_id],g_Can1RxData,RxHeader1.DataLength);break;	
+            case Chassis_3508_Motor1_RxID:
+                DJI_Motor_Info_Update(&Chassis.Wheel_Motor[RIGHT_Wheel], g_Can1RxData, RxHeader1.DataLength);
+                Chassis_MotorFeedbackReceived(CHASSIS_MOTOR_RIGHT_WHEEL);
+                break;
+            case Chassis_3508_Motor2_RxID:
+                DJI_Motor_Info_Update(&Chassis.Wheel_Motor[LEFT_Wheel], g_Can1RxData, RxHeader1.DataLength);
+                Chassis_MotorFeedbackReceived(CHASSIS_MOTOR_LEFT_WHEEL);
+                break;
+            case JOINT_DM_RIGHT_FRONT_RxID_Set:
+                DM_Motor_Info_Update(&Chassis.Joint_Motor[RIGHT_FRONT_id], g_Can1RxData, RxHeader1.DataLength);
+                Chassis_MotorFeedbackReceived(CHASSIS_MOTOR_RIGHT_FRONT);
+                break;
+            case JOINT_DM_RIGHT_BACK_RxID_Set:
+                DM_Motor_Info_Update(&Chassis.Joint_Motor[RIGHT_BACK_id], g_Can1RxData, RxHeader1.DataLength);
+                Chassis_MotorFeedbackReceived(CHASSIS_MOTOR_RIGHT_BACK);
+                break;
 			
 			
 			default: break;
@@ -233,17 +251,15 @@ void HAL_FDCAN_RxFifo0Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo0ITs)
 	}
 	else if(hfdcan->Instance == FDCAN3)
 	{
-		/* 从RX_FIFO0检索Rx消息 */
-		memset(g_Can3RxData, 0, sizeof(g_Can3RxData));	// 清空接收缓冲区	
-		HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0, &RxHeader3, g_Can3RxData);
-			
-		switch(RxHeader3.Identifier)
-		{
-			
-			
-			
-			default: break;
-		}
+        while (HAL_FDCAN_GetRxFifoFillLevel(hfdcan, FDCAN_RX_FIFO0) != 0U)
+        {
+            if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO0,
+                                      &RxHeader3, g_Can3RxData) != HAL_OK)
+            {
+                break;
+            }
+            BoardComm_OnCanRx(&RxHeader3, g_Can3RxData);
+        }
 	}
   }
 }
@@ -263,12 +279,23 @@ void HAL_FDCAN_RxFifo1Callback(FDCAN_HandleTypeDef *hfdcan, uint32_t RxFifo1ITs)
     {
 		/* 从RX_FIFO1检索Rx消息 */
 		memset(g_Can2RxData, 0, sizeof(g_Can2RxData));
-		HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO1, &RxHeader2, g_Can2RxData);
+        if (HAL_FDCAN_GetRxMessage(hfdcan, FDCAN_RX_FIFO1, &RxHeader2, g_Can2RxData) != HAL_OK ||
+            RxHeader2.IdType != FDCAN_STANDARD_ID || RxHeader2.RxFrameType != FDCAN_DATA_FRAME ||
+            RxHeader2.FDFormat != FDCAN_CLASSIC_CAN || RxHeader2.DataLength != FDCAN_DLC_BYTES_8)
+        {
+            return;
+        }
 		switch(RxHeader2.Identifier)
 		{
-			case JOINT_DM_LEFT_FRONT_RxID_Set	:DM_Motor_Info_Update(&Chassis.Joint_Motor[LEFT_FRONT_id],g_Can2RxData,RxHeader2.DataLength);break;
+            case JOINT_DM_LEFT_FRONT_RxID_Set:
+                DM_Motor_Info_Update(&Chassis.Joint_Motor[LEFT_FRONT_id], g_Can2RxData, RxHeader2.DataLength);
+                Chassis_MotorFeedbackReceived(CHASSIS_MOTOR_LEFT_FRONT);
+                break;
 			
-			case JOINT_DM_LEFT_BACK_RxID_Set	:DM_Motor_Info_Update(&Chassis.Joint_Motor[LEFT_BACK_id],g_Can2RxData,RxHeader2.DataLength);break;
+            case JOINT_DM_LEFT_BACK_RxID_Set:
+                DM_Motor_Info_Update(&Chassis.Joint_Motor[LEFT_BACK_id], g_Can2RxData, RxHeader2.DataLength);
+                Chassis_MotorFeedbackReceived(CHASSIS_MOTOR_LEFT_BACK);
+                break;
 			default: break;
 		}	
     }

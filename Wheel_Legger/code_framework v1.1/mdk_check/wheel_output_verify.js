@@ -39,13 +39,17 @@ try {
     const header = read(path.join(root, "User/APP/chassis_task.h"), "gb18030");
     const driver = read(path.join(root, "User/Devices/DJI_Motor/DJI_Motor.c"));
     const math = read(path.join(root, "User/Algorithm/some_config/some_para.c"));
+    const motorGuard = chassis.includes("chassis_motor_online_update");
+    const jointEnable = chassis.includes("chassis_joint_enable_check");
     const macros = ["LeftWheelT_TO_Current", "RightWheelT_TO_Current"];
+    if (motorGuard) macros.push("CHASSIS_MOTOR_FEEDBACK_TIMEOUT_MS");
     const definitions = macros.map(name => {
         const line = header.match(new RegExp("^#define\\s+" + name + "\\s+[^\\r\\n]+", "m"));
         if (!line) throw new Error("Missing macro: " + name);
         return line[0];
     });
-    for (const name of ["Chassis_Wheel_e", "Chassis_Joint_ID_e"]) {
+    for (const name of ["Chassis_Wheel_e", "Chassis_Joint_ID_e",
+                        ...(motorGuard ? ["Chassis_MotorFeedback_e"] : [])]) {
         const enums = [...header.matchAll(/typedef\s+enum\s*\{[^}]*\}\s*\w+\s*;/g)];
         const declaration = enums.find(match => match[0].endsWith(name + ";"));
         if (!declaration) throw new Error("Missing enum: " + name);
@@ -62,6 +66,8 @@ try {
     }
     const lqrHeader = read(path.join(root, "User/Algorithm/LQR/LQR.h"));
     definitions.push(...[...lqrHeader.matchAll(/^#define\s+\w+_MAX\s+[^\r\n]+/gm)].map(m => m[0]));
+    if (motorGuard) definitions.push("#define WHEEL_OUTPUT_HAS_MOTOR_GUARD 1");
+    if (jointEnable) definitions.push("#define WHEEL_OUTPUT_HAS_JOINT_ENABLE 1");
     write("wheel_definitions.inc", definitions.join("\n"));
     write("stm32h723xx.h", "#include <stdint.h>\n");
     write("bsp_can.h", "typedef int hcan_t;\n");
@@ -69,7 +75,14 @@ try {
     write("wheel_implementation.inc", [
         definition(math, "mySaturate"), definition(math, "Find_Min_RADIAN"),
         read(path.join(root, "User/Algorithm/LQR/LQR.c")).replace(/^#include[^\r\n]*/gm, ""),
-        definition(driver, "DJI_Motor_ctrl"), definition(chassis, "Chassis_CanTransimit"),
+        definition(driver, "DJI_Motor_ctrl"),
+        ...(motorGuard ? [
+            ...[...chassis.matchAll(/^static volatile (?:uint32_t|uint8_t) motor_feedback_\w+\[[^\]]+\];/gm)].map(m => m[0]),
+            definition(chassis, "Chassis_MotorFeedbackReceived"),
+            definition(chassis, "chassis_motor_online_update"),
+        ] : []),
+        ...(jointEnable ? [definition(chassis, "chassis_joint_enable_check")] : []),
+        definition(chassis, "Chassis_CanTransimit"),
     ].join("\n"));
     const executable = path.join(temp, "wheel" + (process.platform === "win32" ? ".exe" : ""));
     ownedFiles.push(executable);

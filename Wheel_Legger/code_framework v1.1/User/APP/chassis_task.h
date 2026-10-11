@@ -7,6 +7,7 @@
 #include "VMC_calc.h"
 /*********************************/
 #define LEG_LENGTH_RAMP_RATE_M_S 0.15f /* Balance length reference speed (m/s). */
+#define CHASSIS_MOTOR_FEEDBACK_TIMEOUT_MS 100U
 
 #define LEG_PID_KP  2000.0f
 #define LEG_PID_KI  0.0f
@@ -16,7 +17,7 @@
    等效速率增益 = LEG_PID_KD * 循环周期T。T=4ms 时为 16，T=6ms 时为 24。
    先读实测 fb_dt，按 LEG_PID_KD * fb_dt 取初值再调。
    改成这个形式后腿长环微分增益不再随循环周期变化。 */
-#define LEG_PID_KD_RATE  200.0f
+#define LEG_PID_KD_RATE  300.0f
 #define LEG_PID_MAX_OUT  90.0f //90牛
 #define LEG_PID_MAX_IOUT 0.0f
 
@@ -141,6 +142,7 @@ typedef struct
 	
 	Chassis_Mode_e chassis_mode;
 	Chassis_Enable_e chassis_enable;
+    uint8_t all_motors_online; /* All six motors have fresh CAN feedback. */
 
 } Chassis_Info_Typedef;
 
@@ -161,6 +163,17 @@ typedef enum {
 	RIGHT_Wheel = 0
 } Chassis_Wheel_e;
 
+typedef enum
+{
+    CHASSIS_MOTOR_LEFT_FRONT = 0,
+    CHASSIS_MOTOR_LEFT_BACK,
+    CHASSIS_MOTOR_RIGHT_FRONT,
+    CHASSIS_MOTOR_RIGHT_BACK,
+    CHASSIS_MOTOR_LEFT_WHEEL,
+    CHASSIS_MOTOR_RIGHT_WHEEL,
+    CHASSIS_MOTOR_COUNT
+} Chassis_MotorFeedback_e;
+
 
 /*******************************************************************************************************
 寻找最小弧度
@@ -172,5 +185,6 @@ extern Chassis_Info_Typedef Chassis;
 
 
 void chassis_task(void);
+void Chassis_MotorFeedbackReceived(Chassis_MotorFeedback_e motor);
 
 #endif
