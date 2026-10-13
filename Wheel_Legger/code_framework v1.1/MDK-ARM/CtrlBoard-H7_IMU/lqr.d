@@ -57,7 +57,7 @@ ctrlboard-h7_imu/lqr.o: ..\User\Algorithm\LQR\LQR.c \
   C:\Keil_v5\ARM\ARMCLANG\Bin\..\include\stdbool.h \
   ..\User\Devices\DJI_Motor\DJI_Motor.h \
   ..\Drivers\CMSIS\Device\ST\STM32H7xx\Include\stm32h723xx.h \
-  ..\User\Algorithm\VMC\VMC_calc.h \
+  ..\User\Algorithm\VMC\VMC_calc.h ..\User\Controller\ground_contact.h \
   ..\User\Algorithm\some_config\some_para.h ..\User\Lib\user_lib.h \
   ..\Middlewares\Third_Party\FreeRTOS\Source\CMSIS_RTOS\cmsis_os.h \
   ..\Middlewares\Third_Party\FreeRTOS\Source\include\FreeRTOS.h \

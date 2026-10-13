@@ -68,6 +68,7 @@ try {
     definitions.push(...[...lqrHeader.matchAll(/^#define\s+\w+_MAX\s+[^\r\n]+/gm)].map(m => m[0]));
     if (motorGuard) definitions.push("#define WHEEL_OUTPUT_HAS_MOTOR_GUARD 1");
     if (jointEnable) definitions.push("#define WHEEL_OUTPUT_HAS_JOINT_ENABLE 1");
+    write("ground_contact.h", read(path.join(root, "User/Controller/ground_contact.h")));
     write("wheel_definitions.inc", definitions.join("\n"));
     write("stm32h723xx.h", "#include <stdint.h>\n");
     write("bsp_can.h", "typedef int hcan_t;\n");

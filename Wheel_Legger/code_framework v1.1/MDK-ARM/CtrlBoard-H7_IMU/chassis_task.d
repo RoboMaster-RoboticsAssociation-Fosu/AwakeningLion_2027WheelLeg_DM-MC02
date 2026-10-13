@@ -57,6 +57,7 @@ ctrlboard-h7_imu/chassis_task.o: ..\User\APP\chassis_task.c \
   C:\Keil_v5\ARM\ARMCLANG\Bin\..\include\string.h \
   C:\Keil_v5\ARM\ARMCLANG\Bin\..\include\float.h \
   C:\Keil_v5\ARM\ARMCLANG\Bin\..\include\stdlib.h \
+  ..\User\Controller\ground_contact.h \
   ..\Middlewares\Third_Party\FreeRTOS\Source\CMSIS_RTOS\cmsis_os.h \
   ..\Middlewares\Third_Party\FreeRTOS\Source\include\FreeRTOS.h \
   ..\Core\Inc\FreeRTOSConfig.h \

@@ -10,10 +10,12 @@ enum { OFFLINE, ONLINE };
 enum { FALLING_DOWN, FALLING_TO_NORMAL, NORMAL, ZERO_FORCE };
 enum { LEFT_Leg, RIGHT_Leg };
 #include "ramp_definitions.inc"
+#include "ground_contact.h"
 
 static struct
 {
     int chassis_enable, chassis_mode;
+    GroundContact_t ground;
     struct { float set_L0_Left, set_L0_Right, roll_set, roll_set_v; } set_goal;
     struct { struct { float L0, d_L0, theta, F0; } vmc; } leg_situation[2];
     struct { float roll, d_roll; } body_state;
@@ -21,6 +23,7 @@ static struct
 #include "ramp_initial_goal.inc"
 };
 static struct { int ins_flag; } INS = { 1 };
+volatile uint8_t ground_offline_debug_enable = 0U;
 static float fb_dt, F_roll, t_fb, t_mode, t_leso, t_can, t_sum;
 static float cycle_dt = 0.001f;
 static int detected_mode = -1, recovery_handoff;
@@ -29,6 +32,13 @@ static jmp_buf cycle_end;
 
 /* Hardware/task dependencies only; balance control and ramp are real firmware. */
 static void Chassis_init(void) {}
+/* 检测行为由 ground_contact_verify 验证；此处只提供任务接入依赖。 */
+void GroundContact_Reset(void)
+{
+    uint8_t enabled = Chassis.ground.control_enabled;
+    memset(&Chassis.ground, 0, sizeof(Chassis.ground));
+    Chassis.ground.control_enabled = enabled;
+}
 static void chassis_feedback_update(void) { fb_dt = cycle_dt; }
 static void YAW_Parameter_Processing(void) {}
 static void falling_down_detect(void)
@@ -217,6 +227,19 @@ static void CheckPD(void)
     NEAR(Chassis.leg_situation[1].vmc.F0, right, 0.00001f);
 }
 
+static void CheckOfflineObservationReset(void)
+{
+    detected_mode=-1; recovery_handoff=0;
+    Chassis.chassis_enable=OFFLINE; Chassis.chassis_mode=ZERO_FORCE;
+    ground_offline_debug_enable=1U; Chassis.ground.all_off_flag=1U;
+    Cycle(0.001f); CHECK(Chassis.ground.all_off_flag==1U);
+    ground_offline_debug_enable=0U;
+    Cycle(0.001f); CHECK(Chassis.ground.all_off_flag==0U);
+    Chassis.chassis_enable=ONLINE; Chassis.chassis_mode=FALLING_DOWN;
+    ground_offline_debug_enable=1U; Chassis.ground.all_off_flag=1U;
+    Cycle(0.001f); CHECK(Chassis.ground.all_off_flag==0U);
+    ground_offline_debug_enable=0U;
+}
 int main(void)
 {
     CHECK(Chassis.set_goal.set_L0_Left == 0.15f);
@@ -224,6 +247,7 @@ int main(void)
     CheckTransitions();
     CheckTimingAndEntry();
     CheckPD();
+    CheckOfflineObservationReset();
     printf("Balance leg length ramp: %u checks passed\n", checks);
     return 0;
 }

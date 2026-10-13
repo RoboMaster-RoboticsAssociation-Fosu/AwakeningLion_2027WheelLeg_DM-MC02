@@ -76,6 +76,7 @@ uint32_t HAL_FDCAN_GetRxFifoFillLevel(FDCAN_HandleTypeDef *can, uint32_t fifo);
     for (const file of ["User/Devices/DM_Motor/DM_Motor.h", "User/Devices/DJI_Motor/DJI_Motor.h"]) {
         write(path.basename(file), read(file));
     }
+    write("ground_contact.h", read("User/Controller/ground_contact.h"));
     write("chassis_task.h", read("User/APP/chassis_task.h", "gb18030"));
     const chassis = read("User/APP/chassis_task.c", "gb18030");
     const can = read("User/Bsp/bsp_can.c");

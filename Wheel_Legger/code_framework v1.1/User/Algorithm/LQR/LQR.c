@@ -141,6 +141,14 @@ void LQR_Calc(float L_l,float L_r)
 
     for(i=0; i<4; i++)
     {
+        if (Chassis.ground.control_enabled && Chassis.ground.all_off_flag)
+        {
+            /* 空中只保留腿杆角/角速度反馈；轮牵引不能控制位移、航向和车体俯仰。 */
+            T[i] = (i < 2U) ? 0.0f :
+                   u[4]*Fitting_K[i][4] + u[5]*Fitting_K[i][5]
+                 + u[6]*Fitting_K[i][6] + u[7]*Fitting_K[i][7];
+            continue;
+        }
         T[i] = u[0]*Fitting_K[i][0] + u[1]*Fitting_K[i][1]
              +  u[2]*Fitting_K[i][2] + u[3]*Fitting_K[i][3]     // 注意这个 - 号是拟合约定，别改
              + u[4]*Fitting_K[i][4] + u[5]*Fitting_K[i][5]

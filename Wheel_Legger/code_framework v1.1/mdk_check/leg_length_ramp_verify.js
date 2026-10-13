@@ -47,6 +47,7 @@ try {
     const macros = ["LEG_LENGTH_RAMP_RATE_M_S", "LEG_PID_KP", "LEG_PID_KD_RATE", "LEG_PID_MAX_OUT",
         "ROLL_PID_KP", "ROLL_PID_KD", "ROLL_PID_MAX_OUT", "body_mg"].map(name =>
         requiredMatch(header, new RegExp("^#define\\s+" + name + "\\s+[^\\r\\n]+", "m")));
+    write("ground_contact.h", read("User/Controller/ground_contact.h"));
     write("ramp_definitions.inc", [
         ...macros,
         requiredMatch(chassis, /^#define\s+Chassis_Time\s+[^\r\n]+/m),

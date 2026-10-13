@@ -1,4 +1,5 @@
 #include "VMC_calc.h"
+#include <math.h>
 
 void VMC_init(vmc_leg_t *vmc)//给杆长赋值
 {
@@ -122,69 +123,50 @@ void VMC_calc_1(vmc_leg_t *vmc,INS_t *ins,float dt)//计算theta和d_theta给lqr用，
 }
 
 
-void VMC_calc_2(vmc_leg_t *vmc)//计算期望的关节输出力矩
+/* F0 与 dL0、Tp 与 dphi0 共轭；正向映射与反馈逆解共用本拍几何。 */
+static void VMC_Jacobian_Calc(vmc_leg_t *vmc)
 {
-		vmc->j11 = (vmc->l1*arm_sin_f32(vmc->phi0-vmc->phi3)*arm_sin_f32(vmc->phi1-vmc->phi2))/arm_sin_f32(vmc->phi3-vmc->phi2);
-		vmc->j12 = (vmc->l1*arm_cos_f32(vmc->phi0-vmc->phi3)*arm_sin_f32(vmc->phi1-vmc->phi2))/(vmc->L0*arm_sin_f32(vmc->phi3-vmc->phi2));
-		vmc->j21 = (vmc->l4*arm_sin_f32(vmc->phi0-vmc->phi2)*arm_sin_f32(vmc->phi3-vmc->phi4))/arm_sin_f32(vmc->phi3-vmc->phi2);
-		vmc->j22 = (vmc->l4*arm_cos_f32(vmc->phi0-vmc->phi2)*arm_sin_f32(vmc->phi3-vmc->phi4))/(vmc->L0*arm_sin_f32(vmc->phi3-vmc->phi2));
-	
-		vmc->torque_set[0]=vmc->j11*vmc->F0+vmc->j12*vmc->Tp;//phi1
-		vmc->torque_set[1]=vmc->j21*vmc->F0+vmc->j22*vmc->Tp;//phi4
-
+    float denominator = arm_sin_f32(vmc->phi3 - vmc->phi2);
+    vmc->j11 = vmc->l1 * arm_sin_f32(vmc->phi0 - vmc->phi3)
+             * arm_sin_f32(vmc->phi1 - vmc->phi2) / denominator;
+    vmc->j12 = vmc->l1 * arm_cos_f32(vmc->phi0 - vmc->phi3)
+             * arm_sin_f32(vmc->phi1 - vmc->phi2) / (vmc->L0 * denominator);
+    vmc->j21 = vmc->l4 * arm_sin_f32(vmc->phi0 - vmc->phi2)
+             * arm_sin_f32(vmc->phi3 - vmc->phi4) / denominator;
+    vmc->j22 = vmc->l4 * arm_cos_f32(vmc->phi0 - vmc->phi2)
+             * arm_sin_f32(vmc->phi3 - vmc->phi4) / (vmc->L0 * denominator);
 }
 
-float averr[4]={0.0f};
-float aver_fnr=0.0f;
-uint8_t ground_detectionR(vmc_leg_t *vmc,INS_t *ins)
+void VMC_calc_2(vmc_leg_t *vmc)
 {
-
-	vmc->FN=vmc->F0*arm_cos_f32(vmc->theta)+vmc->Tp*arm_sin_f32(vmc->theta)/vmc->L0
-+0.6f*(ins->MotionAccel_n[2]-vmc->dd_L0*arm_cos_f32(vmc->theta)+2.0f*vmc->d_L0*vmc->d_theta*arm_sin_f32(vmc->theta)+vmc->L0*vmc->dd_theta*arm_sin_f32(vmc->theta)+vmc->L0*vmc->d_theta*vmc->d_theta*arm_cos_f32(vmc->theta));
- 
- 
-	averr[0]=averr[1];
-	averr[1]=averr[2];
-	averr[2]=averr[3];
-	averr[3]=vmc->FN;
-	
-	aver_fnr=0.25f*averr[0]+0.25f*averr[1]+0.25f*averr[2]+0.25f*averr[3];//对支持力进行均值滤波
-	
-	
-	if(aver_fnr<3.0f)
-	{//离地了
-
-	  return 1;
-	}
-	else
-	{
-	  return 0;	
-	}
+    VMC_Jacobian_Calc(vmc);
+    vmc->torque_set[0] = vmc->j11 * vmc->F0 + vmc->j12 * vmc->Tp; /* 后关节 phi1，N*m。 */
+    vmc->torque_set[1] = vmc->j21 * vmc->F0 + vmc->j22 * vmc->Tp; /* 前关节 phi4，N*m。 */
 }
 
-
-float averl[4]={0.0f};
-float aver_fnl=0.0f;
-uint8_t ground_detectionL(vmc_leg_t *vmc,INS_t *ins)
+/* 输入为消除电机镜像后的反馈力矩，N*m；输出只用于检测，不改 F0/Tp 指令。 */
+uint8_t VMC_Force_Calc(vmc_leg_t *vmc, float torque_back, float torque_front,
+                       float *F0_feedback, float *Tp_feedback)
 {
-	vmc->FN=vmc->F0*arm_cos_f32(vmc->theta)+vmc->Tp*arm_sin_f32(vmc->theta)/vmc->L0
-+0.6f*(ins->MotionAccel_n[2]-vmc->dd_L0*arm_cos_f32(vmc->theta)+2.0f*vmc->d_L0*vmc->d_theta*arm_sin_f32(vmc->theta)+vmc->L0*vmc->dd_theta*arm_sin_f32(vmc->theta)+vmc->L0*vmc->d_theta*vmc->d_theta*arm_cos_f32(vmc->theta));
- 
-	averl[0]=averl[1];
-	averl[1]=averl[2];
-	averl[2]=averl[3];
-	averl[3]=vmc->FN;
-	
-	aver_fnl=0.25f*averl[0]+0.25f*averl[1]+0.25f*averl[2]+0.25f*averl[3];//对支持力进行均值滤波
-	
-	if(aver_fnl<3.0f)
-	{//离地了
-	  return 1;
-	}
-	else
-	{
-	  return 0;	
-	}
+    float det, force, torque;
+    if (!isfinite(torque_back) || !isfinite(torque_front) ||
+        !isfinite(vmc->L0) || vmc->L0 < 1.0e-4f ||
+        !isfinite(vmc->phi0) || !isfinite(vmc->phi1) || !isfinite(vmc->phi2) ||
+        !isfinite(vmc->phi3) || !isfinite(vmc->phi4) ||
+        fabsf(arm_sin_f32(vmc->phi3 - vmc->phi2)) < 1.0e-6f)
+    {
+        return 0U;
+    }
+    VMC_Jacobian_Calc(vmc);
+    det = vmc->j11 * vmc->j22 - vmc->j12 * vmc->j21;
+    if (!isfinite(det) || fabsf(det) < 1.0e-6f) return 0U;
+    /* [T_back, T_front] = J*[F0, Tp]；固定 2x2 直接逆解，单位为 N、N*m。 */
+    force = (vmc->j22 * torque_back - vmc->j12 * torque_front) / det;
+    torque = (vmc->j11 * torque_front - vmc->j21 * torque_back) / det;
+    if (!isfinite(force) || !isfinite(torque)) return 0U;
+    *F0_feedback = force;
+    *Tp_feedback = torque;
+    return 1U;
 }
 
 float LQR_K_calc(float *coe,float len)

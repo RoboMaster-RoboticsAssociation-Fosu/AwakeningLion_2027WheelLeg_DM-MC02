@@ -6,10 +6,13 @@
 
 typedef struct { float Yaw; } INS_t;
 #include "leso_api.inc"
+#include "ground_contact.h"
 
 enum { OFFLINE = 0, ONLINE = 1, NORMAL = 0, FALLING_DOWN = 1, ZERO_FORCE = 2 };
 typedef struct {
     int chassis_enable, chassis_mode;
+    uint8_t all_motors_online;
+    GroundContact_t ground;
     struct { float x, Estimate_dx, d_yaw, theta, d_theta; } body_state;
     struct { struct { float L0, theta, d_theta, F0, Tp; } vmc; } leg_situation[2];
     struct { float wheel_T; } Wheel_Motor[2];
@@ -408,7 +411,8 @@ static void legacy_equivalence(void)
 
 int main(void)
 {
-    near(leso_wheel_scale, 0, 0, "default wheel target is off");
+    /* 当前用户默认轮补偿为 0.2；本次接入不调整这一参数。 */
+    near(leso_wheel_scale, 0.2f, 0, "default user wheel target retained");
     near(leso_leg_scale, 1, 0, "default hip target preserves standing baseline");
     check(leso_wheel_mode == 3, "default wheel mode is full");
     memcpy(saved_Ad, AdP, sizeof(AdP));

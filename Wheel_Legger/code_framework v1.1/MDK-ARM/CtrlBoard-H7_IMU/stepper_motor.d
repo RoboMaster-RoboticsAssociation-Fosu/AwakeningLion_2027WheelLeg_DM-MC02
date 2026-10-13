@@ -77,4 +77,5 @@ ctrlboard-h7_imu/stepper_motor.o: \
   ..\Drivers\CMSIS\Include\cmsis_compiler.h \
   C:\Keil_v5\ARM\ARMCLANG\Bin\..\include\string.h \
   C:\Keil_v5\ARM\ARMCLANG\Bin\..\include\float.h \
-  C:\Keil_v5\ARM\ARMCLANG\Bin\..\include\stdlib.h
+  C:\Keil_v5\ARM\ARMCLANG\Bin\..\include\stdlib.h \
+  ..\User\Controller\ground_contact.h

@@ -57,4 +57,4 @@ ctrlboard-h7_imu/leso.o: ..\User\Algorithm\LESO\LESO.c \
   C:\Keil_v5\ARM\ARMCLANG\Bin\..\include\stdbool.h \
   ..\User\Devices\DJI_Motor\DJI_Motor.h \
   ..\Drivers\CMSIS\Device\ST\STM32H7xx\Include\stm32h723xx.h \
-  ..\User\Algorithm\VMC\VMC_calc.h
+  ..\User\Algorithm\VMC\VMC_calc.h ..\User\Controller\ground_contact.h

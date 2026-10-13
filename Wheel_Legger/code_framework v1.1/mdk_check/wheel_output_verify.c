@@ -5,6 +5,7 @@
 #include <string.h>
 #include "DJI_Motor.h"
 #include "wheel_definitions.inc"
+#include "ground_contact.h"
 #define PI 3.14159265358979323846f
 #define Chassis_Time 1
 #define J8009_T_MIN (-40.0f)
@@ -14,12 +15,14 @@
 #define RIGHT_Joint_Motor_CAN_hfdcan joint_can_right
 
 enum { OFFLINE, ONLINE };
+enum { FALLING_DOWN, FALLING_TO_NORMAL, NORMAL, ZERO_FORCE };
 enum { LEFT_Leg, RIGHT_Leg };
 typedef struct { float Yaw; } INS_t;
 typedef struct { struct { uint16_t state; } Data; } JointMotorStub;
 typedef struct
 {
-    int chassis_enable;
+    int chassis_enable, chassis_mode;
+    GroundContact_t ground;
     uint8_t all_motors_online;
     DJI_Motor_Info_Typedef Wheel_Motor[4];
     JointMotorStub Joint_Motor[4];

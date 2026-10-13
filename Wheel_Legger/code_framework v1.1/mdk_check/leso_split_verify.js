@@ -42,6 +42,7 @@ try {
     if (source.split(call).length !== 2) throw new Error("Missing unique update seam");
     write("leso_implementation.inc", stripIncludes(source).replace(call,
         call.replace("LESO_Update(", "verify_LESO_Update(")));
+    write("ground_contact.h", fs.readFileSync(path.join(root, "User/Controller/ground_contact.h"), "utf8"));
     const flags = [];
     if (process.argv[2]) {
         let legacy = new TextDecoder("utf-8", { fatal: true }).decode(fs.readFileSync(process.argv[2]));

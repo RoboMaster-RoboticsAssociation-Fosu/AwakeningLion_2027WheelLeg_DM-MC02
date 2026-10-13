@@ -456,7 +456,12 @@ static float lesio_comp_step(float state, float target)
 
  void LESO_Service(void)
   {
-      uint8_t online_now = (Chassis.chassis_enable == ONLINE && Chassis.chassis_mode == NORMAL);
+      /* 观测模式沿用原行为；启用后仅双腿有效且触地时使用十维着地模型。
+         此门在更新和注入前生效，避免悬空第一拍仍使用旧补偿。恢复复用原 seed/等待/渐入。 */
+      uint8_t online_now = (Chassis.chassis_enable == ONLINE && Chassis.chassis_mode == NORMAL &&
+          (!Chassis.ground.control_enabled || (Chassis.all_motors_online &&
+           Chassis.ground.valid[LEFT_Leg] && Chassis.ground.valid[RIGHT_Leg] &&
+           !Chassis.ground.off_flag[LEFT_Leg] && !Chassis.ground.off_flag[RIGHT_Leg])));
       uint8_t edge;
       float y[10];
       float target_wheel;
@@ -531,10 +536,9 @@ static float lesio_comp_step(float state, float target)
        * LESO_GATE_TIME 之后一直接入，不再被噪声打断。comp 走一阶斜坡，
        * 通断不产生力矩阶跃。
        *
-       * ⚠ 十维模型假设双轮触地，单腿悬空时模型不成立。参考工程用触地标志
-       * 挡住这种情况，本工程 ground_detectionL/R 只定义未调用，暂时缺这层
-       * 保护——目前只靠 chassis_mode == NORMAL 兜底。接上触地检测后应把它
-       * 加进本判据。LESO_GATE_DX / LESO_GATE_DTHETA 因此暂时闲置，保留待用。 */
+       * 触地门在 online_now 中统一处理；开关默认仅观测。启用后单腿悬空即暂停
+       * 观测与补偿，双腿重新触地时走同一进入边沿，清历史后重新等待与渐入。
+       * LESO_GATE_DX / LESO_GATE_DTHETA 继续保留原状态。 */
       stable_t += 0.001f;
       target_wheel = (stable_t > LESO_GATE_TIME) ? lesio_comp_target(leso_wheel_scale) : 0.0f;
       target_leg = (stable_t > LESO_GATE_TIME) ? lesio_comp_target(leso_leg_scale) : 0.0f;

@@ -76,4 +76,5 @@ ctrlboard-h7_imu/remote_task.o: ..\User\APP\Remote_task.c \
   ..\User\Algorithm\PID\pid.h ..\User\Devices\DJI_Motor\DJI_Motor.h \
   ..\Drivers\CMSIS\Device\ST\STM32H7xx\Include\stm32h723xx.h \
   ..\User\Algorithm\VMC\VMC_calc.h ..\User\APP\INS_task.h \
-  ..\User\Config\user_sys_config.h ..\User\Config\user_sys_config.h
+  ..\User\Controller\ground_contact.h ..\User\Config\user_sys_config.h \
+  ..\User\Config\user_sys_config.h

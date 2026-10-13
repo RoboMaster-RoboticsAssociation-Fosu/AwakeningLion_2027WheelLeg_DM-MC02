@@ -57,7 +57,7 @@ ctrlboard-h7_imu/bsp_can.o: ..\User\Bsp\bsp_can.c ..\User\Bsp\bsp_can.h \
   ..\Drivers\CMSIS\Include\cmsis_compiler.h \
   C:\Keil_v5\ARM\ARMCLANG\Bin\..\include\float.h \
   C:\Keil_v5\ARM\ARMCLANG\Bin\..\include\stdlib.h \
-  ..\User\APP\board_comm_task.h \
+  ..\User\Controller\ground_contact.h ..\User\APP\board_comm_task.h \
   ..\User\Devices\Remote_Control\Remote_Control.h \
   ..\Middlewares\Third_Party\FreeRTOS\Source\CMSIS_RTOS\cmsis_os.h \
   ..\Middlewares\Third_Party\FreeRTOS\Source\include\FreeRTOS.h \

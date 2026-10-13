@@ -36,6 +36,7 @@ static void chassis_recovery_reset(void);
 static void chassis_recovery_abort(void);
 static void chassis_recovery_control(void);
 static void chassis_leg_length_reference_update(void);
+static void chassis_motor_online_update(void);
 
 
 PidTypedef LegLenth_Left_Pid;
@@ -172,6 +173,12 @@ void chassis_task(void)
 		
 		YAW_Parameter_Processing();//yaw的目标角设置
 		falling_down_detect();//倒地检测
+        /* OFFLINE 调试观测允许保留历史；在线自起/零力仍复位检测。 */
+        if (Chassis.chassis_mode != NORMAL &&
+            !(Chassis.chassis_enable == OFFLINE && ground_offline_debug_enable))
+        {
+            GroundContact_Reset();
+        }
         chassis_leg_length_reference_update();
 		if(Chassis.chassis_enable == OFFLINE)
 		{
@@ -278,33 +285,52 @@ static void Chassis_init(void)
 
 void chassis_feedback_update(void)
 {
+    DM_Motor_Data_Typedef joint_fb[4];
+    INS_t ins_fb;
+    float torque_fb[2][2];
+    float wheel_velocity[2];
+    float detect_dt;
+    uint8_t joint;
+    uint8_t was_airborne = Chassis.ground.control_enabled && Chassis.ground.all_off_flag;
+    uint32_t primask;
 	static uint32_t fb_dwt_cnt = 0;
-	fb_dt = DWT_GetDeltaT(&fb_dwt_cnt);   /* 本周期实际耗时(秒)，DWT实测 */
-	if (fb_dt > 0.05f || fb_dt <= 0.0f)
+    fb_dt = DWT_GetDeltaT(&fb_dwt_cnt);
+    detect_dt = fb_dt; /* 检测保留原始周期，异常时不借用控制回退值累计确认。 */
+    /* 在线检查在检测前刷新；发送端仍独立检查一次。 */
+    chassis_motor_online_update();
+    primask = __get_PRIMASK();
+    __disable_irq();
+    ins_fb = INS;
+    for (joint = 0U; joint < 4U; ++joint) joint_fb[joint] = Chassis.Joint_Motor[joint].Data;
+    wheel_velocity[LEFT_Wheel] = Chassis.Wheel_Motor[LEFT_Wheel].Data.Velocity;
+    wheel_velocity[RIGHT_Wheel] = Chassis.Wheel_Motor[RIGHT_Wheel].Data.Velocity;
+    __set_PRIMASK(primask);
+    /* 快照以外的几何计算不关中断，避免延长 CAN/IMU 的响应时间。 */
+	if (!isfinite(fb_dt) || fb_dt > 0.05f || fb_dt <= 0.0f)
 		fb_dt = Chassis_Time * 0.001f;          /* 首拍/异常时回退到名义周期 */
 	Chassis.leg_situation[LEFT_Leg].last_wheel_s =   Chassis.leg_situation[LEFT_Leg].wheel_s;
-	Chassis.leg_situation[LEFT_Leg].wheel_s      = -(Chassis.Wheel_Motor[LEFT_Wheel].Data.Velocity/(Gear_Ratio*60.0f))*2.0f*PI*wheel_R;
+	Chassis.leg_situation[LEFT_Leg].wheel_s      = -(wheel_velocity[LEFT_Wheel]/(Gear_Ratio*60.0f))*2.0f*PI*wheel_R;
 	Chassis.leg_situation[RIGHT_Leg].last_wheel_s =   Chassis.leg_situation[RIGHT_Leg].wheel_s;
-	Chassis.leg_situation[RIGHT_Leg].wheel_s      = ( Chassis.Wheel_Motor[RIGHT_Wheel].Data.Velocity/(Gear_Ratio*60.0f))*2.0f*PI*wheel_R;
+	Chassis.leg_situation[RIGHT_Leg].wheel_s      = ( wheel_velocity[RIGHT_Wheel]/(Gear_Ratio*60.0f))*2.0f*PI*wheel_R;
 
-	Chassis.body_state.yaw     =  INS.Yaw;
-	Chassis.body_state.d_yaw   =  INS.Gyro[2];
-	Chassis.body_state.theta   =  INS.Pitch;
-	Chassis.body_state.d_theta =  -INS.Gyro[1];
-	Chassis.body_state.roll = INS.Roll;
-	Chassis.body_state.d_roll = -INS.Gyro[0];
+	Chassis.body_state.yaw     =  ins_fb.Yaw;
+	Chassis.body_state.d_yaw   =  ins_fb.Gyro[2];
+	Chassis.body_state.theta   =  ins_fb.Pitch;
+	Chassis.body_state.d_theta =  -ins_fb.Gyro[1];
+	Chassis.body_state.roll = ins_fb.Roll;
+	Chassis.body_state.d_roll = -ins_fb.Gyro[0];
 
-	Chassis.leg_situation[LEFT_Leg].vmc.phi4 =pi/2 +  Chassis.Joint_Motor[LEFT_FRONT_id].Data.pos;
-	Chassis.leg_situation[LEFT_Leg].vmc.phi1 = pi/2 + Chassis.Joint_Motor[LEFT_BACK_id].Data.pos;
-	Chassis.leg_situation[RIGHT_Leg].vmc.phi4 =pi/2 + mirror*Chassis.Joint_Motor[RIGHT_FRONT_id].Data.pos;
-	Chassis.leg_situation[RIGHT_Leg].vmc.phi1 = pi/2 + mirror*Chassis.Joint_Motor[RIGHT_BACK_id].Data.pos;
-	Chassis.leg_situation[LEFT_Leg].vmc.d_phi1 = Chassis.Joint_Motor[LEFT_BACK_id].Data.vel;
-	Chassis.leg_situation[LEFT_Leg].vmc.d_phi4 = Chassis.Joint_Motor[LEFT_FRONT_id].Data.vel;
-	Chassis.leg_situation[RIGHT_Leg].vmc.d_phi1 = mirror*Chassis.Joint_Motor[RIGHT_BACK_id].Data.vel;
-	Chassis.leg_situation[RIGHT_Leg].vmc.d_phi4 = mirror*Chassis.Joint_Motor[RIGHT_FRONT_id].Data.vel;
+	Chassis.leg_situation[LEFT_Leg].vmc.phi4 =pi/2 +  joint_fb[LEFT_FRONT_id].pos;
+	Chassis.leg_situation[LEFT_Leg].vmc.phi1 = pi/2 + joint_fb[LEFT_BACK_id].pos;
+	Chassis.leg_situation[RIGHT_Leg].vmc.phi4 =pi/2 + mirror*joint_fb[RIGHT_FRONT_id].pos;
+	Chassis.leg_situation[RIGHT_Leg].vmc.phi1 = pi/2 + mirror*joint_fb[RIGHT_BACK_id].pos;
+	Chassis.leg_situation[LEFT_Leg].vmc.d_phi1 = joint_fb[LEFT_BACK_id].vel;
+	Chassis.leg_situation[LEFT_Leg].vmc.d_phi4 = joint_fb[LEFT_FRONT_id].vel;
+	Chassis.leg_situation[RIGHT_Leg].vmc.d_phi1 = mirror*joint_fb[RIGHT_BACK_id].vel;
+	Chassis.leg_situation[RIGHT_Leg].vmc.d_phi4 = mirror*joint_fb[RIGHT_FRONT_id].vel;
 
-	VMC_calc_1(&Chassis.leg_situation[LEFT_Leg].vmc,&INS,fb_dt);
-	VMC_calc_1(&Chassis.leg_situation[RIGHT_Leg].vmc,&INS,fb_dt);
+	VMC_calc_1(&Chassis.leg_situation[LEFT_Leg].vmc,&ins_fb,fb_dt);
+	VMC_calc_1(&Chassis.leg_situation[RIGHT_Leg].vmc,&ins_fb,fb_dt);
 	
 	Chassis.leg_situation[LEFT_Leg].stator_s = Chassis.leg_situation[LEFT_Leg].wheel_s + Chassis.leg_situation[LEFT_Leg].vmc.d_theta*wheel_R; ///未打滑的理想情况下,定子相对于地面的速度
 	Chassis.leg_situation[RIGHT_Leg].stator_s = Chassis.leg_situation[RIGHT_Leg].wheel_s + Chassis.leg_situation[RIGHT_Leg].vmc.d_theta*wheel_R; ///未打滑的理想情况下,定子相对于地面的速度
@@ -319,7 +345,23 @@ void chassis_feedback_update(void)
 	
 	Chassis.body_state.Estimate_h    = 0.5f*(Chassis.leg_situation[LEFT_Leg].vmc.L0 + Chassis.leg_situation[RIGHT_Leg].vmc.L0);  //估计的车体高度
 
-	if(fabs(Chassis.set_goal.v_set) >= 0.05f|| Chassis.chassis_enable == OFFLINE)        // 遥控有速度指令（在动）
+    /* 数组第二维是后/前关节；原始右腿力矩交给检测模块统一镜像。 */
+    torque_fb[LEFT_Leg][0] = joint_fb[LEFT_BACK_id].state == 1U ? joint_fb[LEFT_BACK_id].tor : NAN;
+    torque_fb[LEFT_Leg][1] = joint_fb[LEFT_FRONT_id].state == 1U ? joint_fb[LEFT_FRONT_id].tor : NAN;
+    torque_fb[RIGHT_Leg][0] = joint_fb[RIGHT_BACK_id].state == 1U ? joint_fb[RIGHT_BACK_id].tor : NAN;
+    torque_fb[RIGHT_Leg][1] = joint_fb[RIGHT_FRONT_id].state == 1U ? joint_fb[RIGHT_FRONT_id].tor : NAN;
+    GroundContact_Update(detect_dt, ins_fb.MotionAccel_n[2], (const float (*)[2])torque_fb);
+    if (was_airborne && !Chassis.ground.all_off_flag)
+    {
+        /* 位置/航向反馈恢复前对齐保持目标，避免带着空中积累的误差落地。 */
+        Chassis.set_goal.yaw_set = ins_fb.Yaw;
+    }
+    if ((Chassis.ground.control_enabled && Chassis.ground.all_off_flag) || was_airborne)
+    {
+        Chassis.chassis_flag.start_situate_flag = 0U;
+        Chassis.body_state.x = 0.0f;
+    }
+    else if(fabs(Chassis.set_goal.v_set) >= 0.05f|| Chassis.chassis_enable == OFFLINE)        // 遥控有速度指令（在动）
 	{
    	 	Chassis.chassis_flag.start_situate_flag = 0;
     	Chassis.body_state.x = 0;                      // 运动中：位置清零，不积分
@@ -460,7 +502,12 @@ void Chassis_CanTransimit(void)
     chassis_motor_online_update();
 	if(Chassis.chassis_enable == ONLINE && Chassis.all_motors_online)
 	{
-		
+        /* 发送前最终检查；轮下标 LEFT=1、RIGHT=0，与腿下标相反。 */
+        if (Chassis.chassis_mode == NORMAL && Chassis.ground.control_enabled && Chassis.ground.all_off_flag)
+        {
+            Chassis.Wheel_Motor[LEFT_Wheel].wheel_T = 0.0f;
+            Chassis.Wheel_Motor[RIGHT_Wheel].wheel_T = 0.0f;
+        }
         /* 先限幅轮力矩，再转 int16_t 电流，避免越界后反向。 */
 		mySaturate(&Chassis.Wheel_Motor[LEFT_Wheel].wheel_T,-4.8f,4.8f);
 		mySaturate(&Chassis.Wheel_Motor[RIGHT_Wheel].wheel_T,-4.8f,4.8f);
@@ -557,8 +604,18 @@ void LEG_Lenth_Control(void)
 	F_roll    = ROLL_PID_KP * roll_err + ROLL_PID_KD * roll_rate;
 	mySaturate(&F_roll,-ROLL_PID_MAX_OUT,ROLL_PID_MAX_OUT);
 
-	Chassis.leg_situation[LEFT_Leg].vmc.F0  = (body_mg/2.0f)*arm_cos_f32(Chassis.leg_situation[LEFT_Leg].vmc.theta)  + F_leg_L + F_roll;
-	Chassis.leg_situation[RIGHT_Leg].vmc.F0 = (body_mg/2.0f)*arm_cos_f32(Chassis.leg_situation[RIGHT_Leg].vmc.theta) + F_leg_R - F_roll;
+    if (Chassis.ground.control_enabled && Chassis.ground.all_off_flag)
+    {
+        /* 无地面反力时只保持腿长 PD；车体重力前馈和 Roll 不能在空中纠正姿态。 */
+        F_roll = 0.0f;
+        Chassis.leg_situation[LEFT_Leg].vmc.F0 = F_leg_L;
+        Chassis.leg_situation[RIGHT_Leg].vmc.F0 = F_leg_R;
+    }
+    else
+    {
+        Chassis.leg_situation[LEFT_Leg].vmc.F0 = (body_mg/2.0f)*arm_cos_f32(Chassis.leg_situation[LEFT_Leg].vmc.theta) + F_leg_L + F_roll;
+        Chassis.leg_situation[RIGHT_Leg].vmc.F0 = (body_mg/2.0f)*arm_cos_f32(Chassis.leg_situation[RIGHT_Leg].vmc.theta) + F_leg_R - F_roll;
+    }
 }
 
 void falling_down_detect(void)

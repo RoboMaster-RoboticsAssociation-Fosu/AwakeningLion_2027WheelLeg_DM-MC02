@@ -51,7 +51,6 @@ typedef struct
 	float last_L0;
 	float last_d_L0;
 	
-	float FN;//Ö§³ÖÁ¦
 	float A1;//ÖÐ¼ä±äÁ¿
 	uint8_t first_flag;
 	
@@ -64,8 +63,10 @@ extern void VMC_init(vmc_leg_t *vmc);//ï¿½ï¿½ï¿½Ë³ï¿½ï¿½ï¿½Öµ
 extern void VMC_calc_1(vmc_leg_t *vmc,INS_t *ins,float dt);//ï¿½ï¿½ï¿½ï¿½thetaï¿½ï¿½d_thetaï¿½ï¿½lqrï¿½Ã£ï¿½Í¬Ê±Ò²ï¿½ï¿½ï¿½ï¿½ï¿½È³ï¿½L0
 extern void VMC_calc_2(vmc_leg_t *vmc);//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¹Ø½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿?
 
-extern uint8_t ground_detectionR(vmc_leg_t *vmc,INS_t *ins);//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø¼ï¿½ï¿½
-extern uint8_t ground_detectionL(vmc_leg_t *vmc,INS_t *ins);//ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ø¼ï¿½ï¿½
+
+/* ·´À¡Äæ½â£ºÊäÈëºó/Ç°¹Ø½Ú¹éÒ»»¯Á¦¾Ø£»³É¹¦·µ»Ø 1£¬¼¸ºÎÍË»¯·µ»Ø 0¡£ */
+extern uint8_t VMC_Force_Calc(vmc_leg_t *vmc, float torque_back, float torque_front,
+                              float *F0_feedback, float *Tp_feedback);
 
 extern float LQR_K_calc(float *coe,float len);
 	

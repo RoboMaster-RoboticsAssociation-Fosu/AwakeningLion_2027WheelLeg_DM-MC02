@@ -75,4 +75,5 @@ ctrlboard-h7_imu/ps2_task.o: ..\User\APP\ps2_task.c \
   ..\Drivers\CMSIS\Include\cmsis_compiler.h \
   C:\Keil_v5\ARM\ARMCLANG\Bin\..\include\string.h \
   C:\Keil_v5\ARM\ARMCLANG\Bin\..\include\float.h \
-  C:\Keil_v5\ARM\ARMCLANG\Bin\..\include\stdlib.h
+  C:\Keil_v5\ARM\ARMCLANG\Bin\..\include\stdlib.h \
+  ..\User\Controller\ground_contact.h

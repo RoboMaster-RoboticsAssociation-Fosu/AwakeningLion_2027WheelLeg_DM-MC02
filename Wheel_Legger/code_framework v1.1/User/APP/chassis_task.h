@@ -5,6 +5,7 @@
 #include "DM_Motor.h"
 #include "DJI_Motor.h"
 #include "VMC_calc.h"
+#include "ground_contact.h"
 /*********************************/
 #define LEG_LENGTH_RAMP_RATE_M_S 0.15f /* Balance length reference speed (m/s). */
 #define CHASSIS_MOTOR_FEEDBACK_TIMEOUT_MS 100U
@@ -139,6 +140,7 @@ typedef struct
 	
 	BodyState_t body_state;
 	Chassis_flag_t chassis_flag;
+    GroundContact_t ground; /* 离地检测状态，Watch 直接观察此处。 */
 	
 	Chassis_Mode_e chassis_mode;
 	Chassis_Enable_e chassis_enable;
