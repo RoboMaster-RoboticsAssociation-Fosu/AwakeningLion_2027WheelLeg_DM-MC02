@@ -105,13 +105,15 @@ typedef __packed struct
 /* Externs ------------------------------------------------------------------ */
 extern RC_Ctl_t remote_ctrl;
 extern uint8_t SBUS_MultiRx_Buf[2][SBUS_RX_BUF_LEN];
+/* remote_ctrl 始终是选中来源；GIMBAL 的 rx_tick 为最近 0x61 接收时间。 */
 extern uint32_t remote_last_rx_tick;
+extern volatile uint32_t remote_loss_seq;
 
 /* Functions ---------------------------------------------------------------- */
 void SBUS_TO_RC(uint8_t *pData,RC_Ctl_t *RC_CtrlData);
 bool Remote_Is_Offline(void);
-/* Coherent local UART input; false before the first frame or after timeout. */
-bool Remote_GetSnapshot(RC_Ctl_t *snapshot, uint32_t *rx_tick);
+/* 一次快照同时取得数据、接收时间和失联序号；未收齐必需帧或超时返回 false。 */
+bool Remote_GetSnapshot(RC_Ctl_t *snapshot, uint32_t *rx_tick, uint32_t *loss_seq);
 
 
 /* -------------------------------------------------------------------------- */

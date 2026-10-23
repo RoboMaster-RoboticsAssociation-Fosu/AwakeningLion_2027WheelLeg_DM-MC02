@@ -16,7 +16,7 @@ function write(name, text) {
     fs.writeFileSync(file, text, "utf8");
 }
 function definition(source, name) {
-    const match = new RegExp("(?:static\\s+)?(?:void|float)\\s+" + name + "\\s*\\([^;{}]*\\)\\s*\\{").exec(source);
+    const match = new RegExp("(?:static\\s+)?(?:void|float|bool)\\s+" + name + "\\s*\\([^;{}]*\\)\\s*\\{").exec(source);
     if (!match) throw new Error("Missing function: " + name);
     let depth = 0;
     for (let i = source.indexOf("{", match.index); i < source.length; ++i) {
@@ -40,26 +40,40 @@ function run(command, args) {
 
 try {
     const chassis = read("User/APP/chassis_task.c", "gb18030");
+    const remote = read("User/APP/Remote_task.c");
+    const remoteHeader = read("User/Devices/Remote_Control/Remote_Control.h");
     const header = read("User/APP/chassis_task.h", "gb18030");
     const lib = read("User/Lib/user_lib.c");
     const libHeader = read("User/Lib/user_lib.h");
     const math = read("User/Algorithm/some_config/some_para.c");
-    const macros = ["LEG_LENGTH_RAMP_RATE_M_S", "LEG_PID_KP", "LEG_PID_KD_RATE", "LEG_PID_MAX_OUT",
-        "ROLL_PID_KP", "ROLL_PID_KD", "ROLL_PID_MAX_OUT", "body_mg"].map(name =>
+    const macros = ["LEG_LENGTH_SHORT_M", "LEG_LENGTH_MIDDLE_M", "LEG_LENGTH_LONG_M",
+        "LEG_LENGTH_RAMP_RATE_M_S", "LEG_PID_KP", "LEG_PID_KD_RATE", "LEG_PID_MAX_OUT",
+        "ROLL_PID_KP", "ROLL_PID_KD", "ROLL_PID_MAX_OUT", "body_mg",
+        "NORMAL_V_RATE_MPS2", "NORMAL_YAW_RATE_RADPS2"].map(name =>
         requiredMatch(header, new RegExp("^#define\\s+" + name + "\\s+[^\\r\\n]+", "m")));
     write("ground_contact.h", read("User/Controller/ground_contact.h"));
     write("ramp_definitions.inc", [
         ...macros,
+        ...["RC_SW_UP", "RC_SW_MID", "RC_SW_DOWN"].map(name =>
+            requiredMatch(remoteHeader, new RegExp("^#define\\s+" + name + "\\s+[^\\r\\n]+", "m"))),
         requiredMatch(chassis, /^#define\s+Chassis_Time\s+[^\r\n]+/m),
         requiredMatch(libHeader, /typedef\s+struct\s*\{[^}]*\}\s*ramp_function_source_t\s*;/),
         requiredMatch(chassis, /static ramp_function_source_t leg_length_ramp\[2\];/),
         requiredMatch(chassis, /static uint8_t leg_length_ramp_initialized;/),
+        requiredMatch(header, /typedef\s+enum\s*\{[^}]*\}\s*Chassis_Normal_State_e\s*;/),
+        requiredMatch(chassis, /static ramp_function_source_t normal_v_ramp;/),
+        requiredMatch(chassis, /static ramp_function_source_t normal_yaw_ramp;/),
+        requiredMatch(chassis, /static uint8_t normal_ramp_initialized;/),
     ].join("\n"));
     write("ramp_initial_goal.inc", requiredMatch(chassis, /\.set_goal\s*=\s*\{[^}]*\},/));
     write("ramp_implementation.inc", [
+        definition(remote, "Remote_MapLegLength"), definition(remote, "Remote_ApplyControl"),
         definition(lib, "ramp_init"), definition(lib, "ramp_calc"), definition(math, "mySaturate"),
         definition(chassis, "chassis_leg_length_reference_update"), definition(chassis, "LEG_Lenth_Control"),
-        definition(chassis, "normal_mode"), definition(chassis, "chassis_task"),
+        definition(chassis, "normal_state_reset"), definition(chassis, "normal_state_update"),
+        definition(chassis, "normal_target_ramp_update"), definition(chassis, "normal_move_target_update"),
+        definition(chassis, "normal_spin_target_update"), definition(chassis, "normal_mode"),
+        definition(chassis, "chassis_task"),
     ].join("\n"));
     const executable = path.join(temp, "ramp" + (process.platform === "win32" ? ".exe" : ""));
     ownedFiles.push(executable);

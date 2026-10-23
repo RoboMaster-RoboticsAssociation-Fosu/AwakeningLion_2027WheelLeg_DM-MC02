@@ -14,6 +14,7 @@
 #include "chassis_recovery.h"
 #include <math.h>
 #include <stddef.h>
+#include <float.h>
 
 
 #define Chassis_Time						1		
@@ -37,6 +38,11 @@ static void chassis_recovery_abort(void);
 static void chassis_recovery_control(void);
 static void chassis_leg_length_reference_update(void);
 static void chassis_motor_online_update(void);
+static void normal_state_reset(void);
+static void normal_state_update(Chassis_Normal_State_e request);
+static void normal_target_ramp_update(float v_target, float yaw_target);
+static void normal_move_target_update(float v_target, float yaw_target);
+static void normal_spin_target_update(float yaw_target);
 
 
 PidTypedef LegLenth_Left_Pid;
@@ -51,6 +57,11 @@ float fb_dt;
 /* Independent balance references; inspect .out in the debugger. */
 static ramp_function_source_t leg_length_ramp[2];
 static uint8_t leg_length_ramp_initialized;
+
+/* Shared between MOVE and SPIN; switching never restarts these ramps. */
+static ramp_function_source_t normal_v_ramp;
+static ramp_function_source_t normal_yaw_ramp;
+static uint8_t normal_ramp_initialized;
 
 /* Written only by the CAN RX callbacks; no feedback means offline. */
 static volatile uint32_t motor_feedback_tick[CHASSIS_MOTOR_COUNT];
@@ -84,9 +95,11 @@ static uint8_t recovery_output_pending;
 
 extern INS_t INS;
 Chassis_Info_Typedef Chassis = {
+    .normal_state = NORMAL_MOVE,
+    .normal_state_request = NORMAL_MOVE,
     .set_goal = {
-        .set_L0_Left = 0.15f,
-        .set_L0_Right = 0.15f,
+        .set_L0_Left = LEG_LENGTH_SHORT_M,
+        .set_L0_Right = LEG_LENGTH_SHORT_M,
     },
 	.Joint_Motor[LEFT_FRONT_id] = 
 	{
@@ -171,13 +184,17 @@ void chassis_task(void)
 		chassis_feedback_update();//数据更新
 		t_fb = DWT_GetDeltaT(&prof_cnt);
 		
-		YAW_Parameter_Processing();//yaw的目标角设置
 		falling_down_detect();//倒地检测
         /* OFFLINE 调试观测允许保留历史；在线自起/零力仍复位检测。 */
         if (Chassis.chassis_mode != NORMAL &&
             !(Chassis.chassis_enable == OFFLINE && ground_offline_debug_enable))
         {
             GroundContact_Reset();
+        }
+        if (Chassis.chassis_enable != ONLINE || Chassis.chassis_mode != NORMAL ||
+            !Chassis.all_motors_online)
+        {
+            normal_state_reset();
         }
         chassis_leg_length_reference_update();
 		if(Chassis.chassis_enable == OFFLINE)
@@ -281,6 +298,7 @@ static void Chassis_init(void)
 	Chassis.chassis_enable = OFFLINE;
 	Chassis.chassis_mode = ZERO_FORCE;
 	Chassis.set_goal.roll_set = 0.0f;
+    normal_state_reset();
 }
 
 void chassis_feedback_update(void)
@@ -356,18 +374,19 @@ void chassis_feedback_update(void)
         /* 位置/航向反馈恢复前对齐保持目标，避免带着空中积累的误差落地。 */
         Chassis.set_goal.yaw_set = ins_fb.Yaw;
     }
-    if ((Chassis.ground.control_enabled && Chassis.ground.all_off_flag) || was_airborne)
+    if ((Chassis.ground.control_enabled && Chassis.ground.all_off_flag) || was_airborne ||
+        Chassis.normal_state == NORMAL_SPIN)
     {
         Chassis.chassis_flag.start_situate_flag = 0U;
         Chassis.body_state.x = 0.0f;
     }
-    else if(fabs(Chassis.set_goal.v_set) >= 0.05f|| Chassis.chassis_enable == OFFLINE)        // 遥控有速度指令（在动）
+    else if(fabs(Chassis.set_goal.v_ref) >= 0.05f|| Chassis.chassis_enable == OFFLINE)        // 遥控有速度指令（在动）
 	{
    	 	Chassis.chassis_flag.start_situate_flag = 0;
     	Chassis.body_state.x = 0;                      // 运动中：位置清零，不积分
 
 	}
-	else if(((fabs(Chassis.set_goal.v_set)<=0.05f && fabs(Chassis.body_state.Estimate_dx)<=0.2f)) || Chassis.chassis_flag.start_situate_flag)
+	else if(((fabs(Chassis.set_goal.v_ref)<=0.05f && fabs(Chassis.body_state.Estimate_dx)<=0.2f)) || Chassis.chassis_flag.start_situate_flag)
 	{
     	Chassis.chassis_flag.start_situate_flag = 1;           // 静止：开始/继续积分
   		Chassis.body_state.x += Chassis.body_state.Estimate_dx*fb_dt;       // 位置 += 速度*周期
@@ -381,7 +400,8 @@ void chassis_feedback_update(void)
 
 void YAW_Parameter_Processing(void)
 {
-	if((fabsf(Chassis.set_goal.yaw_set_v) > 0.1f) || Chassis.chassis_enable == OFFLINE)
+	if(Chassis.normal_state == NORMAL_SPIN ||
+       (fabsf(Chassis.set_goal.yaw_v_ref) > 0.1f) || Chassis.chassis_enable == OFFLINE)
     	{
 			Chassis.set_goal.yaw_set = Chassis.body_state.yaw;
 		}
@@ -570,7 +590,7 @@ static void chassis_leg_length_reference_update(void)
             float length = Chassis.leg_situation[leg].vmc.L0;
             /* Include entry feedback, especially recovery's 0.139 m stance. */
             ramp_init(&leg_length_ramp[leg], dt,
-                      fmaxf(0.25f, length), fminf(0.15f, length));
+                      fmaxf(LEG_LENGTH_LONG_M, length), fminf(LEG_LENGTH_SHORT_M, length));
             leg_length_ramp[leg].input = LEG_LENGTH_RAMP_RATE_M_S;
             leg_length_ramp[leg].out = length;
         }
@@ -643,7 +663,7 @@ void falling_down_detect(void)
     }
     if (phi0_L < 0.4f || phi0_L > 2.5f ||
         phi0_R < 0.4f || phi0_R > 2.5f ||
-        fabs(Chassis.body_state.theta) > 0.3f)
+        fabs(Chassis.body_state.theta) > 0.5f)
     {
         Chassis.chassis_mode = ZERO_FORCE;
     }
@@ -689,8 +709,129 @@ void zero_force(void)
     chassis_recovery_reset();
 }
 
+static void normal_state_reset(void)
+{
+    Chassis.normal_state = NORMAL_MOVE;
+    Chassis.normal_state_request = NORMAL_MOVE;
+    Chassis.set_goal.v_ref = 0.0f;
+    Chassis.set_goal.yaw_v_ref = 0.0f;
+    Chassis.set_goal.yaw_set = Chassis.body_state.yaw;
+    Chassis.body_state.x = 0.0f;
+    Chassis.chassis_flag.start_situate_flag = 0U;
+    normal_ramp_initialized = 0U;
+    normal_v_ramp.out = 0.0f;
+    normal_yaw_ramp.out = 0.0f;
+}
+
+/* Transition actions run once, before executing the new state this cycle. */
+static void normal_state_update(Chassis_Normal_State_e request)
+{
+    if (request == Chassis.normal_state)
+    {
+        return;
+    }
+    switch (request)
+    {
+        case NORMAL_MOVE:
+            /* Exit SPIN: restore position feedback about the current pose. */
+            Chassis.body_state.x = 0.0f;
+            Chassis.chassis_flag.start_situate_flag = 0U;
+            Chassis.set_goal.yaw_set = Chassis.body_state.yaw;
+            Chassis.normal_state = NORMAL_MOVE;
+            break;
+
+        case NORMAL_SPIN:
+            /* Enter SPIN: discard parking error without restarting speed ramps. */
+            Chassis.body_state.x = 0.0f;
+            Chassis.chassis_flag.start_situate_flag = 0U;
+            Chassis.set_goal.yaw_set = Chassis.body_state.yaw;
+            Chassis.normal_state = NORMAL_SPIN;
+            break;
+
+        default:
+            break;
+    }
+}
+
+static void normal_target_ramp_update(float v_target, float yaw_target)
+{
+    float dt = fb_dt;
+
+    if (!isfinite(dt) || dt <= 0.0f || dt > 0.05f)
+    {
+        dt = Chassis_Time * 0.001f;
+    }
+    if (normal_ramp_initialized == 0U)
+    {
+        /* Input mapping and motor limits remain the existing limit owners. */
+        ramp_init(&normal_v_ramp, dt, FLT_MAX, -FLT_MAX);
+        ramp_init(&normal_yaw_ramp, dt, FLT_MAX, -FLT_MAX);
+        normal_v_ramp.input = NORMAL_V_RATE_MPS2;
+        normal_yaw_ramp.input = NORMAL_YAW_RATE_RADPS2;
+        normal_ramp_initialized = 1U;
+    }
+    normal_v_ramp.frame_period = dt;
+    normal_yaw_ramp.frame_period = dt;
+
+    if (Chassis.ground.control_enabled && Chassis.ground.all_off_flag)
+    {
+        normal_v_ramp.out = 0.0f;
+        normal_yaw_ramp.out = 0.0f;
+    }
+    else
+    {
+        ramp_calc(&normal_v_ramp, v_target);
+        ramp_calc(&normal_yaw_ramp, yaw_target);
+    }
+    Chassis.set_goal.v_ref = normal_v_ramp.out;
+    Chassis.set_goal.yaw_v_ref = normal_yaw_ramp.out;
+}
+
+static void normal_move_target_update(float v_target, float yaw_target)
+{
+    normal_target_ramp_update(v_target, yaw_target);
+}
+
+static void normal_spin_target_update(float yaw_target)
+{
+    normal_target_ramp_update(0.0f, yaw_target);
+}
+
 void normal_mode(void)
 {
+    Chassis_Normal_State_e request;
+    float v_target;
+    float yaw_target;
+    uint32_t primask;
+
+    if (Chassis.chassis_enable != ONLINE || Chassis.chassis_mode != NORMAL ||
+        !Chassis.all_motors_online)
+    {
+        normal_state_reset();
+        chassis_zero_outputs();
+        return;
+    }
+
+    /* Sample mode and both targets together before restoring interrupts. */
+    primask = __get_PRIMASK();
+    __disable_irq();
+    request = Chassis.normal_state_request;
+    v_target = Chassis.set_goal.v_set;
+    yaw_target = Chassis.set_goal.yaw_set_v;
+    __set_PRIMASK(primask);
+
+    normal_state_update(request);
+    switch (Chassis.normal_state)
+    {
+        case NORMAL_MOVE:
+            normal_move_target_update(v_target, yaw_target);
+            break;
+
+        case NORMAL_SPIN:
+            normal_spin_target_update(yaw_target);
+            break;
+    }
+    YAW_Parameter_Processing();
     LQR();
     LEG_Lenth_Control();
 }

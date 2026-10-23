@@ -223,7 +223,7 @@ static void ControlAndObserver(void)
 {
     float groundF[2],groundT[4]; unsigned n; Reset(0);
     Chassis.body_state.roll=0.04f; Chassis.body_state.d_roll=-0.01f;
-    Chassis.set_goal.v_set=0.5f; Chassis.set_goal.yaw_set=-0.5f; INS.Yaw=0.2f;
+    Chassis.set_goal.v_set=Chassis.set_goal.v_ref=0.5f; Chassis.set_goal.yaw_set=-0.5f; INS.Yaw=0.2f;
     LEG_Lenth_Control(); LQR_Calc(0.20f,0.20f);
     groundF[0]=Chassis.leg_situation[0].vmc.F0; groundF[1]=Chassis.leg_situation[1].vmc.F0;
     groundT[0]=Chassis.Wheel_Motor[LEFT_Wheel].wheel_T; groundT[1]=Chassis.Wheel_Motor[RIGHT_Wheel].wheel_T;

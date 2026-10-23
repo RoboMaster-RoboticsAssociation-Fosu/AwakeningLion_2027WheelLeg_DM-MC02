@@ -24,7 +24,7 @@ function run(program, args) {
     return result;
 }
 function definition(source, name) {
-    const match = new RegExp("void\\s+" + name + "\\s*\\([^;{}]*\\)\\s*\\{").exec(source);
+    const match = new RegExp("(?:void|int16_t)\\s+" + name + "\\s*\\([^;{}]*\\)\\s*\\{").exec(source);
     if (!match) throw new Error("Missing real callback: " + name);
     let depth = 0;
     for (let i = source.indexOf("{", match.index); i < source.length; ++i) {
@@ -46,7 +46,12 @@ try {
     const chassisHeader = read("User/APP/chassis_task.h", "gb18030");
     const motorEnum = chassisHeader.match(/typedef\s+enum\s*\{[^}]*\}\s*Chassis_MotorFeedback_e\s*;/);
     if (!motorEnum) throw new Error("Missing motor feedback enum");
-    write("chassis_task.h", '#include "main.h"\n' + motorEnum[0] + "\n");
+    const normalEnum = chassisHeader.match(/typedef\s+enum\s*\{[^}]*\}\s*Chassis_Normal_State_e\s*;/);
+    if (!normalEnum) throw new Error("Missing normal state enum");
+    write("chassis_task.h", '#ifndef REMOTE_VERIFY_CHASSIS_H\n#define REMOTE_VERIFY_CHASSIS_H\n#include "main.h"\n' +
+        motorEnum[0] + "\n" + normalEnum[0] + "\n" +
+        [...chassisHeader.matchAll(/^#define\s+LEG_LENGTH_(?:SHORT|MIDDLE|LONG)_M\s+[^\r\n]+/gm)]
+            .map(m => m[0]).join("\n") + "\n#endif\n");
     write("can_callback.c", '#include "main.h"\n#include "chassis_task.h"\n#include "board_comm_task.h"\n#include <string.h>\n' +
         "void Chassis_MotorFeedbackReceived(Chassis_MotorFeedback_e motor) { (void)motor; }\n" +
         definition(read("User/Bsp/bsp_can.c"), "HAL_FDCAN_RxFifo0Callback") + "\n");
@@ -54,14 +59,20 @@ try {
         path.join(temp, "Remote_task.c"), path.join(temp, "Remote_Control.c"),
         path.join(temp, "board_comm_task.c"), path.join(temp, "can_callback.c"),
         path.join(__dirname, "remote_source_verify.c"), "-lm"];
+    const allScenarios = ["protocol", "mapping", "timeout", "missing_sticks", "missing_status",
+                          "lost", "burst", "direct", "startup_status", "wrap", "gaps", "fifo", "stream", "snapshot",
+                          "leg_length", "spin_mapping", "spin_startup", "spin_timeout", "rearm"];
+    const scenarios = process.argv.length > 2 ? process.argv.slice(2) : allScenarios;
+    for (const scenario of scenarios) {
+        if (!allScenarios.includes(scenario)) throw new Error("Unknown scenario: " + scenario);
+    }
     for (const mode of ["local", "gimbal"]) {
         const exe = path.join(temp, mode + (process.platform === "win32" ? ".exe" : ""));
         ownedFiles.push(exe);
         const expectedSource = mode === "gimbal" ? 1 : 0;
         const flags = ["-DCHASSIS_CTRL_SOURCE=" + expectedSource];
         run(compiler, [...common, ...flags, "-o", exe]);
-        for (const scenario of ["protocol", "mapping", "timeout", "missing_sticks", "missing_status",
-                                "lost", "burst", "overflow", "startup_status", "wrap", "fifo", "stream", "snapshot", "leg_length"]) {
+        for (const scenario of scenarios) {
             const result = run(exe, [scenario]);
             if (!result.stdout.startsWith("remote source " + expectedSource + " ")) {
                 throw new Error("Wrong compiled control source for " + mode);
@@ -70,7 +81,7 @@ try {
     }
     for (const selector of ["99", "MISSPELLED_SOURCE"]) {
         const invalid = spawnSync(compiler, ["-std=c99", "-I", temp, "-DCHASSIS_CTRL_SOURCE=" + selector, "-fsyntax-only",
-            path.join(temp, "Remote_task.c")], { encoding: "utf8" });
+            path.join(temp, "Remote_Control.c")], { encoding: "utf8" });
         if (invalid.error) throw invalid.error;
         if (invalid.status === 0 || (selector === "99" && !invalid.stderr.includes("Invalid CHASSIS_CTRL_SOURCE"))) {
             throw new Error("Illegal source selection must fail at compile time: " + selector);
@@ -81,11 +92,13 @@ try {
     const ioc = read("CtrlBoard-H7_IMU.ioc");
     if (!/^#define INCLUDE_vTaskDelayUntil\s+1$/m.test(rtos) ||
         !/^FREERTOS.INCLUDE_vTaskDelayUntil=1\r?$/m.test(ioc)) throw new Error("Delay-until must stay enabled");
-    for (const [task, entry] of [["REMOTO_TASK", "Remote_Task"], ["BOARD_COMMUNICA", "Board_communicate"]]) {
+    for (const [task, entry] of [["REMOTO_TASK", "Remote_Task"]]) {
         if (!tasks.includes("osThreadDef(" + task + ", " + entry + ", osPriorityHigh, 0, 256);") ||
             !ioc.includes(task + ",2,256," + entry + ",")) throw new Error("Task configuration mismatch: " + task);
     }
-    console.log("remote sources: both configurations, illegal macro and RTOS settings passed");
+    if (/BOARD_COMMUNICA|Board_communicate|board_comm_task\(\)/.test(tasks) ||
+        /BOARD_COMMUNICA|Board_communicate/.test(ioc)) throw new Error("Obsolete board parsing task remains");
+    console.log("remote sources: both configurations (" + scenarios.join(", ") + "), illegal macro and RTOS settings passed");
 } finally {
     for (const file of ownedFiles) if (fs.existsSync(file)) fs.unlinkSync(file);
     fs.rmdirSync(temp);

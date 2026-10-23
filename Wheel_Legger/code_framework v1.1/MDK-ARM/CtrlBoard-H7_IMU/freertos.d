@@ -76,6 +76,4 @@ ctrlboard-h7_imu/freertos.o: ..\Core\Src\freertos.c \
   ..\User\Algorithm\VMC\VMC_calc.h ..\User\Controller\ground_contact.h \
   ..\User\APP\ps2_task.h ..\User\Devices\PS2_Device\PS2_Device.h \
   ..\Core\Inc\usart.h ..\Core\Inc\main.h ..\Core\Inc\gpio.h \
-  ..\User\APP\Remote_task.h ..\User\APP\INS_task.h \
-  ..\User\APP\board_comm_task.h \
-  ..\User\Devices\Remote_Control\Remote_Control.h
+  ..\User\APP\Remote_task.h ..\User\APP\INS_task.h

@@ -29,7 +29,6 @@
 #include "chassis_task.h"
 #include "ps2_task.h"
 #include "Remote_task.h"
-#include "board_comm_task.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -56,7 +55,6 @@ osThreadId INS_TASKHandle;
 osThreadId CHASSIS_TASKHandle;
 osThreadId PS2_TASKHandle;
 osThreadId REMOTO_TASKHandle;
-osThreadId BOARD_COMMUNICAHandle;
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN FunctionPrototypes */
@@ -68,7 +66,6 @@ void INS_Task(void const * argument);
 void CHASSIS_Task(void const * argument);
 void PS2_Task(void const * argument);
 void Remote_Task(void const * argument);
-void Board_communicate(void const * argument);
 
 extern void MX_USB_DEVICE_Init(void);
 void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
@@ -120,9 +117,6 @@ void MX_FREERTOS_Init(void) {
   osThreadDef(REMOTO_TASK, Remote_Task, osPriorityHigh, 0, 256);
   REMOTO_TASKHandle = osThreadCreate(osThread(REMOTO_TASK), NULL);
 
-  /* definition and creation of BOARD_COMMUNICA */
-  osThreadDef(BOARD_COMMUNICA, Board_communicate, osPriorityHigh, 0, 256);
-  BOARD_COMMUNICAHandle = osThreadCreate(osThread(BOARD_COMMUNICA), NULL);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -225,19 +219,7 @@ void Remote_Task(void const * argument)
   /* USER CODE END Remote_Task */
 }
 
-/* USER CODE BEGIN Header_Board_communicate */
-/**
-* @brief Function implementing the BOARD_COMMUNICA thread.
-* @param argument: Not used
-* @retval None
-*/
-/* USER CODE END Header_Board_communicate */
-void Board_communicate(void const * argument)
-{
-  /* USER CODE BEGIN Board_communicate */
-  board_comm_task();
-  /* USER CODE END Board_communicate */
-}
+
 
 /* Private application code --------------------------------------------------*/
 /* USER CODE BEGIN Application */

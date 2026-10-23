@@ -7,8 +7,15 @@
 #include "VMC_calc.h"
 #include "ground_contact.h"
 /*********************************/
+/* Shared S1 presets and balance ramp limits (m). */
+#define LEG_LENGTH_SHORT_M  0.159f
+#define LEG_LENGTH_MIDDLE_M 0.25f
+#define LEG_LENGTH_LONG_M   0.35f
 #define LEG_LENGTH_RAMP_RATE_M_S 0.15f /* Balance length reference speed (m/s). */
 #define CHASSIS_MOTOR_FEEDBACK_TIMEOUT_MS 100U
+
+#define NORMAL_V_RATE_MPS2        2.0f /* Translation target slew rate (m/s^2). */
+#define NORMAL_YAW_RATE_RADPS2    3.0f /* Yaw target slew rate (rad/s^2). */
 
 #define LEG_PID_KP  2000.0f
 #define LEG_PID_KI  0.0f
@@ -99,6 +106,9 @@ typedef struct
 	float yaw_set;//期望偏航角度，单位是弧度
 	float yaw_set_v;//期望偏航角度速度，单位是弧度/s
 
+    float v_ref;      /* Mode/ramp output consumed by LQR (m/s). */
+    float yaw_v_ref;  /* Mode/ramp output consumed by LQR (rad/s). */
+
 	float roll_set;//期望roll角，单位是弧度
 	float roll_set_v;//期望roll角速度，单位是弧度/s
 
@@ -127,6 +137,13 @@ typedef enum{
 	ZERO_FORCE,
 }Chassis_Mode_e;
 
+/* Tasks within the top-level NORMAL balance phase. */
+typedef enum
+{
+    NORMAL_MOVE = 0,
+    NORMAL_SPIN
+} Chassis_Normal_State_e;
+
 
 
 typedef struct
@@ -144,6 +161,8 @@ typedef struct
 	
 	Chassis_Mode_e chassis_mode;
 	Chassis_Enable_e chassis_enable;
+    Chassis_Normal_State_e normal_state; /* Owned by the chassis task. */
+    volatile Chassis_Normal_State_e normal_state_request; /* Remote task input. */
     uint8_t all_motors_online; /* All six motors have fresh CAN feedback. */
 
 } Chassis_Info_Typedef;

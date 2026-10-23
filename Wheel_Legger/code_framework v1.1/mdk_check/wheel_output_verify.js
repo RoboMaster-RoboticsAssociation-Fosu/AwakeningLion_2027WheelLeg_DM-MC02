@@ -48,7 +48,7 @@ try {
         if (!line) throw new Error("Missing macro: " + name);
         return line[0];
     });
-    for (const name of ["Chassis_Wheel_e", "Chassis_Joint_ID_e",
+    for (const name of ["Chassis_Wheel_e", "Chassis_Joint_ID_e", "Chassis_Normal_State_e",
                         ...(motorGuard ? ["Chassis_MotorFeedback_e"] : [])]) {
         const enums = [...header.matchAll(/typedef\s+enum\s*\{[^}]*\}\s*\w+\s*;/g)];
         const declaration = enums.find(match => match[0].endsWith(name + ";"));

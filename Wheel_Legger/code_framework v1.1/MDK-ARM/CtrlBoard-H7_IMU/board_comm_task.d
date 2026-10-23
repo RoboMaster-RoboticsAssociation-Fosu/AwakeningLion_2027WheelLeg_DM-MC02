@@ -63,4 +63,5 @@ ctrlboard-h7_imu/board_comm_task.o: ..\User\APP\board_comm_task.c \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_pcd.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_ll_usb.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_pcd_ex.h \
-  ..\User\Bsp\bsp_dwt.h
+  ..\User\Bsp\bsp_dwt.h ..\User\Config\user_sys_config.h \
+  ..\User\Config\user_sys_config.h

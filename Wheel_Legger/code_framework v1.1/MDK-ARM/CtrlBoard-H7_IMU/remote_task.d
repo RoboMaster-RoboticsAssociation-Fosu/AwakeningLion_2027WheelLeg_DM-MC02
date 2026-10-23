@@ -71,10 +71,9 @@ ctrlboard-h7_imu/remote_task.o: ..\User\APP\Remote_task.c \
   ..\Middlewares\Third_Party\FreeRTOS\Source\include\event_groups.h \
   ..\Middlewares\Third_Party\FreeRTOS\Source\include\timers.h \
   C:\Keil_v5\ARM\ARMCLANG\Bin\..\include\stdbool.h \
-  ..\User\APP\board_comm_task.h ..\User\APP\chassis_task.h \
-  ..\User\Devices\DM_Motor\DM_Motor.h ..\User\Bsp\bsp_can.h \
-  ..\User\Algorithm\PID\pid.h ..\User\Devices\DJI_Motor\DJI_Motor.h \
+  ..\User\APP\chassis_task.h ..\User\Devices\DM_Motor\DM_Motor.h \
+  ..\User\Bsp\bsp_can.h ..\User\Algorithm\PID\pid.h \
+  ..\User\Devices\DJI_Motor\DJI_Motor.h \
   ..\Drivers\CMSIS\Device\ST\STM32H7xx\Include\stm32h723xx.h \
   ..\User\Algorithm\VMC\VMC_calc.h ..\User\APP\INS_task.h \
-  ..\User\Controller\ground_contact.h ..\User\Config\user_sys_config.h \
-  ..\User\Config\user_sys_config.h
+  ..\User\Controller\ground_contact.h

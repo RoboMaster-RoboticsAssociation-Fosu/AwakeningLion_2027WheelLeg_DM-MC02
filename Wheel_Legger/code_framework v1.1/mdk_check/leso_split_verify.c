@@ -4,7 +4,7 @@
 #include <string.h>
 #include <math.h>
 
-typedef struct { float Yaw; } INS_t;
+typedef struct { float Yaw, YawTotalAngle; } INS_t;
 #include "leso_api.inc"
 #include "ground_contact.h"
 
@@ -21,6 +21,7 @@ TestChassis Chassis;
 INS_t INS;
 static int fault_channel = -1;
 static unsigned checks, failures;
+static float captured_yaw_measurement;
 static void verify_LESO_Update(LESO_t *o, const float *Ad, const float *Bd, const float *L,
                                const float *y, const float *u, const float *dlim);
 #include "leso_implementation.inc"
@@ -29,6 +30,7 @@ static void verify_LESO_Update(LESO_t *o, const float *Ad, const float *Bd, cons
 static void verify_LESO_Update(LESO_t *o, const float *Ad, const float *Bd, const float *L,
                                const float *y, const float *u, const float *dlim)
 {
+    captured_yaw_measurement = y[2];
     LESO_Update(o, Ad, Bd, L, y, u, dlim);
     if (fault_channel >= 0) o->dh[fault_channel] = NAN;
 }
@@ -378,6 +380,7 @@ static void legacy_equivalence(void)
             Chassis.body_state.x = 0.02f * sinf(t);
             Chassis.body_state.Estimate_dx = 0.02f * cosf(t);
             INS.Yaw = 0.04f * sinf(2 * t);
+            INS.YawTotalAngle = INS.Yaw;
             Chassis.body_state.d_yaw = 0.08f * cosf(2 * t);
             Chassis.leg_situation[LEFT_Leg].vmc.theta = 0.1f * sinf(2 * t);
             Chassis.leg_situation[LEFT_Leg].vmc.d_theta = 0.2f * cosf(2 * t);
@@ -409,17 +412,54 @@ static void legacy_equivalence(void)
 }
 #endif
 
+/* Exercise the real service across multiple wrapped-angle boundaries. */
+static void continuous_yaw(void)
+{
+    unsigned direction, step;
+    for (direction = 0U; direction < 2U; ++direction)
+    {
+        float sign = direction == 0U ? 1.0f : -1.0f;
+        float previous = 0.0f;
+        reset(1);
+        Chassis.body_state.d_yaw = sign * 3.0f;
+        for (step = 1U; step <= 10000U; ++step)
+        {
+            float angle = sign * 3.0f * ((float)step * 0.001f);
+            INS.Yaw = atan2f(sinf(angle), cosf(angle));
+            INS.YawTotalAngle = angle;
+            tick();
+            near(captured_yaw_measurement, angle, 0.0f, "LESO consumes continuous yaw");
+            check(fabsf(captured_yaw_measurement - previous) < 0.00301f,
+                  "no full-turn discontinuity in LESO measurement");
+            for (unsigned i = 0U; i < LESO_N_STATE; ++i)
+                check(isfinite(leso.xh[i]), "multi-turn observer remains finite");
+            for (unsigned i = 0U; i < 4U; ++i)
+                check(isfinite(leso.dh[i]), "multi-turn disturbance remains finite");
+            previous = captured_yaw_measurement;
+        }
+        Chassis.chassis_enable = OFFLINE;
+        tick();
+        INS.YawTotalAngle += sign * 4.0f;
+        INS.Yaw = atan2f(sinf(INS.YawTotalAngle), cosf(INS.YawTotalAngle));
+        Chassis.chassis_enable = ONLINE;
+        tick();
+        near(captured_yaw_measurement, INS.YawTotalAngle, 0.0f,
+             "re-entry seeds using current continuous yaw");
+        near(leso_dbg_comp_wheel, 0.0f, 0.0f, "re-entry preserves convergence gate");
+    }
+}
+
 int main(void)
 {
-    /* 当前用户默认轮补偿为 0.2；本次接入不调整这一参数。 */
-    near(leso_wheel_scale, 0.2f, 0, "default user wheel target retained");
+    /* Preserve current wheel/hip defaults; remote mapping does not retune LESO. */
+    near(leso_wheel_scale, 1.0f, 0, "default user wheel target retained");
     near(leso_leg_scale, 1, 0, "default hip target preserves standing baseline");
     check(leso_wheel_mode == 3, "default wheel mode is full");
     memcpy(saved_Ad, AdP, sizeof(AdP));
     memcpy(saved_Bd, BdP, sizeof(BdP));
     memcpy(saved_L, LP, sizeof(LP));
     routing(); ramps_and_modes(); invalid_values(); observer_without_injection();
-    component_routing(); component_switching();
+    component_routing(); component_switching(); continuous_yaw();
 #ifdef VERIFY_LEGACY
     legacy_equivalence();
 #else

@@ -17,7 +17,7 @@
 #define SPIN_SCAN_LENGTH 0.39f /* 扫腿阶段的目标腿长（m） */
 #define SPIN_RETRACT_LENGTH 0.139f /* 收腿及保持阶段的目标腿长（m） */
 #define SPIN_LENGTH_TOLERANCE LEG_MOTION_LENGTH_TOLERANCE_M /* 自起交接时允许的腿长误差（m），沿用单腿到位容差 */
-#define SPIN_SCAN_TIMEOUT_MS 600000U /* 扫腿、收腿、等待及第二段转动的共享总超时（ms） */
+#define SPIN_SCAN_TIMEOUT_MS 4000U /* 扫腿、收腿、等待及第二段转动的共享总超时（ms） */
 #define SPIN_HANDOFF_PITCH_MAX_RAD 0.5f /* 进入 NORMAL 时机体 pitch 绝对值上限（rad），严格小于才允许交接 */
 #define SPIN_HANDOFF_TIMEOUT_MS 500U /* 两腿完成后，等待满足正常平衡交接条件的超时（ms） */
 

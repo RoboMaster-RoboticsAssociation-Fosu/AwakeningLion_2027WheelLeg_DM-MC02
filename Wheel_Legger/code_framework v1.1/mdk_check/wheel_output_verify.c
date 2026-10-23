@@ -22,13 +22,14 @@ typedef struct { struct { uint16_t state; } Data; } JointMotorStub;
 typedef struct
 {
     int chassis_enable, chassis_mode;
+    Chassis_Normal_State_e normal_state;
     GroundContact_t ground;
     uint8_t all_motors_online;
     DJI_Motor_Info_Typedef Wheel_Motor[4];
     JointMotorStub Joint_Motor[4];
     struct { struct { float L0, theta, d_theta, Tp, torque_set[2]; } vmc; } leg_situation[2];
     struct { float x, Estimate_dx, d_yaw, theta, d_theta; } body_state;
-    struct { float v_set, yaw_set, yaw_set_v; } set_goal;
+    struct { float v_set, yaw_set, yaw_set_v, v_ref, yaw_v_ref; } set_goal;
 } Chassis_Info_Typedef;
 INS_t INS;
 Chassis_Info_Typedef Chassis;

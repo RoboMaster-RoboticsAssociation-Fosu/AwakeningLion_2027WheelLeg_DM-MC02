@@ -333,11 +333,11 @@ LEG_DATA = np.array([
 # 代价是输出力矩更大、对该状态测量噪声更敏感。如上 theta_b=20000 最大(平衡最重要),
 # dtheta_* 都只有 5(角速度噪声大, 权重压低防抖)。
 #                         s          ds         phi        dphi    theta_ll   dtheta_ll    theta_lr   dtheta_lr     theta_b    dtheta_b
-Q_LQR = np.diag([     100.0,       25.0,      200.0,       20.0,      400.0,        25.0,      400.0,        25.0,    20000.0,        1.0])
+Q_LQR = np.diag([     100.0,       25.0,      100.0,       60.0,      400.0,        20.0,      400.0,        20.0,    20000.0,        5.0])
 # R 对角线依次对应 4 个输入力矩 (N·m): T_wl(左驱动轮) T_wr(右驱动轮) T_bl(左髋关节) T_br(右髋关节)
 # R 越大越"省力" -> 力矩输出越小、动作越保守。
 #                   T_wl    T_wr    T_bl    T_br
-R_LQR = np.diag([ 20.0,  20.0,   1.0,   1.0])
+R_LQR = np.diag([ 15.0,  15.0,   1.0,   1.0])
 
 # ---- LQR / LESO 共用采样周期及观测器参数 ----
 Ts = 0.001               # 控制周期 (s); K 和 L 均基于该周期的 ZOH 离散模型
@@ -389,10 +389,10 @@ def leg_params_at(l, use_leg_formula=None):
 
 def leg_grid(use_leg_formula=None):
     """拟合用腿长采样表 [(l, lw, lb, Il), ...]:
-    公式模式: 21 个腿长 0.10~0.30 步进 0.01(同 ABK_LQR.py 网格);
+    公式模式: 31 个腿长 0.10~0.40 步进 0.01;
     实测表模式: LEG_DATA 的 11 行。"""
     if (USE_LEG_FORMULA if use_leg_formula is None else use_leg_formula):
-        return [(l, *leg_formula(l)) for l in np.arange(0.10, 0.30 + 1e-9, 0.01)]
+        return [(l, *leg_formula(l)) for l in np.arange(0.10, 0.40 + 1e-9, 0.01)]
     return [(r[0], r[1], r[2], r[3]) for r in LEG_DATA]
 
 

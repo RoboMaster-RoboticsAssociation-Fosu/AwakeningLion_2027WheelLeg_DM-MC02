@@ -32,7 +32,8 @@ enum { RIGHT_FRONT_id, RIGHT_BACK_id, LEFT_BACK_id, LEFT_FRONT_id };
 #define JOINT_DM_RIGHT_FRONT_RxID_Set 0x11U
 #define JOINT_DM_RIGHT_BACK_RxID_Set 0x12U
 typedef struct {
-    int chassis_enable, chassis_mode;
+    int chassis_enable, chassis_mode, normal_state;
+    volatile int normal_state_request;
     struct { float v_set, yaw_set_v, set_L0_Left, set_L0_Right; } set_goal;
     int Wheel_Motor[2], Joint_Motor[4];
 } Chassis_Info_Typedef;

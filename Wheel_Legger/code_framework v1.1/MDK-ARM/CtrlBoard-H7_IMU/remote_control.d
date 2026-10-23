@@ -63,4 +63,7 @@ ctrlboard-h7_imu/remote_control.o: \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_pcd.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_ll_usb.h \
   ..\Drivers\STM32H7xx_HAL_Driver\Inc\stm32h7xx_hal_pcd_ex.h \
-  ..\User\Bsp\bsp_dwt.h C:\Keil_v5\ARM\ARMCLANG\Bin\..\include\string.h
+  ..\User\Bsp\bsp_dwt.h ..\User\Config\user_sys_config.h \
+  ..\User\Config\user_sys_config.h ..\User\APP\board_comm_task.h \
+  ..\User\Devices\Remote_Control\Remote_Control.h \
+  C:\Keil_v5\ARM\ARMCLANG\Bin\..\include\string.h

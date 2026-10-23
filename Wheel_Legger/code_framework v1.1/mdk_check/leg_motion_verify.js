@@ -55,13 +55,12 @@ function recoverySource() {
         }
         throw new Error("Unbalanced recovery function: " + name);
     }
-    const recoveryBegin = source.indexOf("static void chassis_zero_outputs(void)\r\n{");
-    if (recoveryBegin < 0) throw new Error("Missing recovery output helpers");
     return [
         between("ChassisRecovery_Context chassis_recovery;", "extern INS_t INS;"),
         definition("VMC_translate"),
         definition("falling_down_detect"),
-        source.slice(recoveryBegin),
+        ...["chassis_zero_outputs", "chassis_recovery_reset", "chassis_recovery_abort", "zero_force",
+            "chassis_recovery_control", "falling_down", "falling_to_down"].map(definition),
     ].join("\n");
 }
 
@@ -73,7 +72,7 @@ try {
     fs.writeFileSync(excerpt, recoverySource(), "utf8");
     compileAndRun("recovery", "recovery_verify.c");
     compileAndRun("sweep_ramps", "sweep_ramp_verify.c");
-    // Compile copies of the actual modules with only the two ramp macros changed.
+    // Compile copies with alternate ramp durations and a sufficient test-only deadline.
     // This verifies unequal configurations without editing production parameters.
     const controllerDir = path.join(root, "User", "Controller");
     for (const name of ["leg_motion.c", "leg_motion.h", "chassis_recovery.c", "chassis_recovery.h"]) {
@@ -86,7 +85,9 @@ try {
     for (const [angleTime, lengthTime] of times) {
         let configured = header;
         for (const [macro, value] of [["SPIN_SWING_ANGLE_TIME_MS", angleTime],
-                                      ["SPIN_SWING_LENGTH_TIME_MS", lengthTime]]) {
+                                      ["SPIN_SWING_LENGTH_TIME_MS", lengthTime],
+                                      // The 4 s production deadline must not truncate the 8 s test trajectories.
+                                      ["SPIN_SCAN_TIMEOUT_MS", Math.max(angleTime, lengthTime) + 2000]]) {
             const pattern = new RegExp("^#define " + macro + " \\d+U", "gm");
             if ([...configured.matchAll(pattern)].length !== 1) throw new Error("Missing ramp macro: " + macro);
             configured = configured.replace(pattern, "#define " + macro + " " + value + "U");

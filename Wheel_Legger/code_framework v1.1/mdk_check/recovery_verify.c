@@ -37,8 +37,6 @@ static unsigned int mapping_calls;
 static int bad_mapping;
 
 static uint32_t HAL_GetTick(void) { return clock_ms; }
-static void LQR(void) {}
-static void LEG_Lenth_Control(void) {}
 static void VMC_calc_2(vmc_leg_t *vmc)
 {
     ++mapping_calls;
@@ -563,7 +561,11 @@ static void EnableEdges(void)
     ++clock_ms;
     falling_to_down();
     CHECK(Chassis.chassis_mode == NORMAL);
+    /* Current fall detection is strictly greater than 0.5 rad. */
     Chassis.body_state.theta = 0.5f;
+    falling_down_detect();
+    CHECK(Chassis.chassis_mode == NORMAL);
+    Chassis.body_state.theta = nextafterf(0.5f, INFINITY);
     falling_down_detect();
     CHECK(Chassis.chassis_mode == ZERO_FORCE);
     falling_down_detect();
@@ -641,7 +643,8 @@ static void RecoveryStartupTrace(void)
         Chassis.chassis_enable = OFFLINE;
         ++clock_ms;
         falling_down_detect();
-        normal_mode();
+        /* NORMAL offline handling is covered by normal_mode_verify. */
+        chassis_zero_outputs();
         VMC_translate();
         SetPhi(LEFT_Leg, 2.81f, SPIN_SCAN_LENGTH);
         SetPhi(RIGHT_Leg, 2.81f, SPIN_SCAN_LENGTH);
